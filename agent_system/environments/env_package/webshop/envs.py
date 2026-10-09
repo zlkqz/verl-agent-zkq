@@ -16,6 +16,7 @@
 import ray
 import gym
 import numpy as np
+import random
 
 # -----------------------------------------------------------------------------
 # Ray remote worker actor -----------------------------------------------------
@@ -26,7 +27,7 @@ class WebshopWorker:
     Each actor hosts a *WebAgentTextEnv* instance.
     """
     
-    def __init__(self, seed, env_kwargs):
+    def __init__(self, seed, env_kwargs, deterministic_reset=False):
         # Lazy import avoids CUDA initialisation issues
         import sys
         import os
@@ -34,8 +35,9 @@ class WebshopWorker:
         sys.path.append(project_root)
         from web_agent_site.envs import WebAgentTextEnv  # noqa: WPS433 (runtime import)
         
-        env_kwargs['seed'] = seed
-        self.env = gym.make('WebAgentTextEnv-v0', **env_kwargs)
+        self.seed = seed
+        self.deterministic_reset = deterministic_reset
+        self.env = gym.make('WebAgentTextEnv-v0', **dict(env_kwargs, seed=seed))
     
     def step(self, action):
         """Execute a step in the environment"""
@@ -56,6 +58,8 @@ class WebshopWorker:
     
     def reset(self, idx):
         """Reset the environment with given session index"""
+        if self.deterministic_reset:
+            random.seed(self.seed)
         obs, info = self.env.reset(session=idx)
         info = dict(info or {})
         info['available_actions'] = self.env.get_available_actions()
@@ -120,7 +124,7 @@ class WebshopMultiProcessEnv(gym.Env):
         env_worker = ray.remote(**resources_per_worker)(WebshopWorker)
         self._workers = []
         for i in range(self.num_processes):
-            worker = env_worker.remote(seed + (i // self.group_n), self._env_kwargs)
+            worker = env_worker.remote(seed + (i // self.group_n), self._env_kwargs, not is_train)
             self._workers.append(worker)
 
         # Get goals from the first worker
@@ -140,6 +144,12 @@ class WebshopMultiProcessEnv(gym.Env):
 
         if not self.is_train:
             self.goal_idxs = range(500)
+            if self.env_num > len(self.goal_idxs):
+                raise ValueError(f'Validation env_num {self.env_num} exceeds {len(self.goal_idxs)} WebShop test goals')
+            # Select once; every validation pass evaluates the same goals in
+            # the same worker slots. A 500-env run covers the whole test set.
+            self._val_goal_idxs = self._rng.choice(self.goal_idxs, size=self.env_num, replace=False).tolist()
+            print(f'WebShop validation goal indexes: {self._val_goal_idxs}')
         else:
             self.goal_idxs = range(500, len(goals))
             
@@ -173,7 +183,7 @@ class WebshopMultiProcessEnv(gym.Env):
         return obs_list, reward_list, done_list, info_list
 
     def reset(self):
-        idx = self._rng.choice(self.goal_idxs, size=self.env_num, replace=False)
+        idx = self._rng.choice(self.goal_idxs, size=self.env_num, replace=False) if self.is_train else self._val_goal_idxs
         idx = np.repeat(idx, self.group_n).tolist()
 
         # Send reset commands to all workers

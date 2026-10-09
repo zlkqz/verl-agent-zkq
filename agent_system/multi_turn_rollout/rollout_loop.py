@@ -21,6 +21,7 @@ from verl.utils.model import compute_position_id_with_mask
 import verl.utils.torch_functional as verl_F
 from transformers import PreTrainedTokenizer
 import uuid
+import time
 from agent_system.multi_turn_rollout.utils import process_image, to_list_of_dict, torch_to_numpy, filter_group_data
 from agent_system.environments import EnvironmentManagerBase
 from typing import List, Dict
@@ -305,8 +306,15 @@ class TrajectoryCollector:
 
         batch_size = len(gen_batch.batch)
 
+        progress = self.config.env.get('progress', {})
+        show_progress = progress.get('enable', False)
+        rollout_started = time.monotonic()
+        if show_progress:
+            print(f"[rollout] reset started batch={batch_size}", flush=True)
         # Initial observations from the environment
         obs, infos = envs.reset(kwargs=gen_batch.non_tensor_batch.pop('env_kwargs', None))
+        if show_progress:
+            print(f"[rollout] reset finished elapsed={time.monotonic() - rollout_started:.1f}s", flush=True)
 
         lenght_obs = len(obs['text']) if obs['text'] is not None else len(obs['image'])
         assert len(gen_batch.batch) == lenght_obs, f"gen_batch size {len(gen_batch.batch)} does not match obs size {lenght_obs}"
@@ -331,6 +339,9 @@ class TrajectoryCollector:
         # Trajectory collection loop
         for _step in range(self.config.env.max_steps):
             active_masks = np.logical_not(is_done)
+            turn_started = time.monotonic()
+            if show_progress:
+                print(f"[rollout] turn={_step + 1}/{self.config.env.max_steps} generation started active={int(active_masks.sum())}/{batch_size}", flush=True)
 
             batch = self.preprocess_batch(gen_batch=gen_batch, obs=obs)
 
@@ -383,6 +394,15 @@ class TrajectoryCollector:
             episode_rewards[active_masks] += torch_to_numpy(rewards)[active_masks]
             episode_lengths[active_masks] += 1
 
+            if show_progress:
+                current_done = np.logical_or(is_done, dones)
+                print(
+                    f"[rollout] turn={_step + 1}/{self.config.env.max_steps} finished "
+                    f"active={int(active_masks.sum())}/{batch_size} done={int(current_done.sum())}/{batch_size} "
+                    f"mean_episode_reward={float(episode_rewards.mean()):.4f} "
+                    f"elapsed={time.monotonic() - turn_started:.1f}s",
+                    flush=True,
+                )
             assert len(rewards) == batch_size, f"env should return rewards for all environments, got {len(rewards)} rewards for {batch_size} environments"
             batch.non_tensor_batch['rewards'] = torch_to_numpy(rewards, is_object=True)
             batch.non_tensor_batch['active_masks'] = torch_to_numpy(active_masks, is_object=True)
@@ -410,6 +430,15 @@ class TrajectoryCollector:
                     episode_rewards=episode_rewards, 
                     episode_lengths=episode_lengths,
                     )
+        if show_progress:
+            success_summary = {key: round(float(np.mean(value)), 4) for key, value in success.items()}
+            print(
+                f"[rollout] completed trajectories={batch_size} "
+                f"mean_length={float(episode_lengths.mean()):.2f} "
+                f"mean_reward={float(episode_rewards.mean()):.4f} "
+                f"success={success_summary} elapsed={time.monotonic() - rollout_started:.1f}s",
+                flush=True,
+            )
         
         return total_batch_list, episode_rewards, episode_lengths, success, traj_uid, tool_callings
     

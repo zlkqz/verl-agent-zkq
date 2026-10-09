@@ -69,17 +69,25 @@ class WebAgentTextEnv(gym.Env):
         self.attr_path = attr_path
 
         self.base_url = 'http://127.0.0.1:3000'
-        self.server = SimServer(
-            self._seed,
-            self.base_url,
-            self.file_path,
-            self.attr_path,
-            self.kwargs.get('filter_goals'),
-            self.kwargs.get('limit_goals', -1),
-            self.kwargs.get('num_products'),
-            self.kwargs.get('human_goals'),
-            self.kwargs.get('show_attrs', False),
-        ) if server is None else server
+        if server is None:
+            # Goal order, generated prices, and price limits must agree across
+            # every worker so that goal indexes define a real train/test split.
+            random.seed(self.kwargs.get('goal_seed', self._seed))
+            self.server = SimServer(
+                self.kwargs.get('goal_seed', self._seed),
+                self.base_url,
+                self.file_path,
+                self.attr_path,
+                self.kwargs.get('filter_goals'),
+                self.kwargs.get('limit_goals', -1),
+                self.kwargs.get('num_products'),
+                self.kwargs.get('human_goals'),
+                self.kwargs.get('show_attrs', False),
+            )
+            # Keep each worker's runtime randomness independent of goal creation.
+            random.seed(self._seed)
+        else:
+            self.server = server
         self.browser = SimBrowser(self.server)
 
         self.session = self.kwargs.get('session')
@@ -315,6 +323,16 @@ class SimServer:
             load_products(filepath=file_path, attrpath=attr_path, num_products=num_products, human_goals=human_goals)
         self.search_engine = init_search_engine(num_products=num_products)
         self.goals = get_goals(self.all_products, self.product_prices, human_goals)
+        # Repeated option values can produce identical goals at different
+        # indexes. Remove them before the train/test index split.
+        seen_goals = set()
+        unique_goals = []
+        for goal in self.goals:
+            key = json.dumps(goal, sort_keys=True)
+            if key not in seen_goals:
+                seen_goals.add(key)
+                unique_goals.append(goal)
+        self.goals = unique_goals
         self.show_attrs = show_attrs
 
         # Fix outcome for random shuffling of goals

@@ -674,7 +674,8 @@ def make_envs(config):
                     'num_products': None, 
                     'human_goals': config.env.webshop.human_goals,
                     'file_path': file_path,
-                    'attr_path': attr_path
+                    'attr_path': attr_path,
+                    'goal_seed': config.env.seed,
                     }
         _envs = build_webshop_envs(seed=config.env.seed, env_num=config.data.train_batch_size, group_n=group_n, is_train=True, env_kwargs=env_kwargs, resources_per_worker=resources_per_worker)
         _val_envs = build_webshop_envs(seed=config.env.seed + 1000, env_num=config.data.val_batch_size, group_n=1, is_train=False, env_kwargs=env_kwargs, resources_per_worker=resources_per_worker)

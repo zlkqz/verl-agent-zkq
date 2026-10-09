@@ -19,7 +19,10 @@ This trainer supports model-agonistic model initialization with huggingface
 """
 
 import json
+import io
 import os
+import sys
+import time
 import uuid
 from collections import defaultdict
 from contextlib import contextmanager
@@ -686,7 +689,63 @@ class RayPPOTrainer:
         # Log to each configured logger
         self.validation_generations_logger.log(self.config.trainer.logger, samples, self.global_steps)
 
+    def _report_progress(self, message):
+        if self.config.env.get("progress", {}).get("enable", False):
+            print(message, flush=True)
+
+    def _print_rollout_samples(self, batch, phase):
+        """Format selected complete trajectories in memory, then print from the driver."""
+        progress = self.config.env.get("progress", {})
+        if not progress.get("enable", False):
+            return
+        sample_count = max(0, int(progress.get("sample_count", 2)))
+        if sample_count == 0:
+            return
+
+        trajectory_ids = batch.non_tensor_batch["traj_uid"]
+        selected = {}
+        for row_index, trajectory_id in enumerate(trajectory_ids):
+            trajectory_id = str(trajectory_id)
+            if trajectory_id not in selected:
+                if len(selected) >= sample_count:
+                    continue
+                selected[trajectory_id] = []
+            selected[trajectory_id].append(row_index)
+
+        output = io.StringIO()
+        output.write(f"\n{'=' * 24} {phase.upper()} | step {self.global_steps} | {len(selected)} complete trajectories {'=' * 24}\n")
+        output.write("说明：每轮展示完整模型输入和输出；仅排除 padding token。\n\n")
+        for sample_number, (trajectory_id, row_indices) in enumerate(selected.items(), start=1):
+            first_row = row_indices[0]
+            output.write(f"{'=' * 24} 样本 {sample_number}/{len(selected)} 开始 {'=' * 24}\n")
+            output.write(f"轨迹 ID：{trajectory_id}\n")
+            output.write(f"批次行号：{first_row}\n")
+            output.write(f"整条轨迹奖励：{batch.non_tensor_batch['episode_rewards'][first_row]}\n")
+            output.write(f"轨迹轮数：{batch.non_tensor_batch['episode_lengths'][first_row]}\n")
+            output.write(f"工具调用数：{batch.non_tensor_batch['tool_callings'][first_row]}\n\n")
+            for turn_number, row_index in enumerate(row_indices, start=1):
+                prompts = batch.batch["prompts"][row_index]
+                responses = batch.batch["responses"][row_index]
+                attention_mask = batch.batch["attention_mask"][row_index].bool()
+                prompt_mask = attention_mask[: len(prompts)]
+                response_mask = attention_mask[-len(responses) :]
+                prompt_text = self.tokenizer.decode(prompts[prompt_mask], skip_special_tokens=False)
+                response_text = self.tokenizer.decode(responses[response_mask], skip_special_tokens=False)
+                output.write(f"--- 第 {turn_number}/{len(row_indices)} 轮 | 批次行号 {row_index} ---\n")
+                output.write("[模型输入：观察与历史]\n")
+                output.write(prompt_text + "\n")
+                output.write("[模型输出：完整回复]\n")
+                output.write(response_text + "\n")
+                output.write(f"[环境奖励] {batch.non_tensor_batch['rewards'][row_index]}\n")
+                output.write(f"[动作有效] {batch.non_tensor_batch['is_action_valid'][row_index]}\n\n")
+            output.write(f"{'=' * 24} 样本 {sample_number}/{len(selected)} 结束 {'=' * 24}\n\n")
+        output.write(f"{'=' * 24} {phase.upper()} | step {self.global_steps} | 样本打印结束 {'=' * 24}\n")
+        sys.stdout.write(output.getvalue())
+        sys.stdout.flush()
+
     def _validate(self):
+        validation_started = time.monotonic()
+        self._report_progress(f"[validation] start step={self.global_steps} batches={len(self.val_dataloader)}")
         reward_tensor_lst = []
         data_source_lst = []
         tool_calling_list = []
@@ -698,11 +757,15 @@ class RayPPOTrainer:
         sample_outputs = []
         sample_scores = []
 
-        for test_data in self.val_dataloader:
+        for batch_index, test_data in enumerate(self.val_dataloader, start=1):
             test_batch = DataProto.from_single_dict(test_data)
 
             # repeat test batch
             test_batch = test_batch.repeat(repeat_times=self.config.actor_rollout_ref.rollout.val_kwargs.n, interleave=True)
+            self._report_progress(
+                f"[validation] batch={batch_index}/{len(self.val_dataloader)} "
+                f"trajectories={len(test_batch.batch)} rollout started"
+            )
 
             # we only do validation on rule-based rm
             if self.config.reward_model.enable and test_batch[0].non_tensor_batch["reward_model"]["style"] == "model":
@@ -752,7 +815,15 @@ class RayPPOTrainer:
                                                     envs=self.val_envs,
                                                     is_train=False,
                                                     )
-            print('validation generation end')
+            self._report_progress(
+                f"[validation] batch={batch_index}/{len(self.val_dataloader)} "
+                f"rollout finished rows={len(test_output_gen_batch.batch)} "
+                f"elapsed={time.monotonic() - validation_started:.1f}s"
+            )
+            try:
+                self._print_rollout_samples(test_output_gen_batch, phase=f"validation_batch_{batch_index:03d}")
+            except Exception as exc:
+                self._report_progress(f"[samples] validation print failed: {exc}")
             del test_batch
             test_batch = test_output_gen_batch
             # Store generated outputs
@@ -767,6 +838,10 @@ class RayPPOTrainer:
             reward_tensor = result["reward_tensor"]
             scores = reward_tensor.sum(-1).cpu().tolist()
             sample_scores.extend(scores)
+            self._report_progress(
+                f"[validation] batch={batch_index}/{len(self.val_dataloader)} "
+                f"mean_score={float(np.mean(scores)):.4f} elapsed={time.monotonic() - validation_started:.1f}s"
+            )
 
             reward_tensor_lst.append(reward_tensor)
             data_source_lst.append(test_batch.non_tensor_batch.get('data_source', ['unknown'] * reward_tensor.shape[0]))
@@ -1030,10 +1105,12 @@ class RayPPOTrainer:
         # perform validation before training
         # currently, we only support validation using the reward_function.
         if self.val_reward_fn is not None and self.config.trainer.get("val_before_train", True):
+            self._report_progress("[training] initial validation started")
             val_metrics = self._validate()
             assert val_metrics, f"{val_metrics=}"
             pprint(f"Initial validation metrics: {val_metrics}")
             logger.log(data=val_metrics, step=self.global_steps)
+            self._report_progress(f"[training] initial validation logged step={self.global_steps}")
             if self.config.trainer.get("val_only", False):
                 return
 
@@ -1046,6 +1123,8 @@ class RayPPOTrainer:
 
         for epoch in range(self.config.trainer.total_epochs):
             for batch_dict in self.train_dataloader:
+                step_started = time.monotonic()
+                self._report_progress(f"[training] step={self.global_steps}/{self.total_training_steps} epoch={epoch + 1} started")
                 metrics = {}
                 timing_raw = {}
                 batch: DataProto = DataProto.from_single_dict(batch_dict)
@@ -1079,12 +1158,21 @@ class RayPPOTrainer:
                         #     self.async_rollout_manager.sleep()
 
                         ################ agent-environment loop ###############
+                        self._report_progress(f"[training] step={self.global_steps} rollout started")
                         gen_batch_output = self.traj_collector.multi_turn_loop(
                                                                 gen_batch=gen_batch,
                                                                 actor_rollout_wg=self.actor_rollout_wg,
                                                                 envs=self.envs,
                                                                 is_train=True,
                                                                 )
+                        self._report_progress(
+                            f"[training] step={self.global_steps} rollout finished "
+                            f"rows={len(gen_batch_output.batch)} elapsed={time.monotonic() - step_started:.1f}s"
+                        )
+                        try:
+                            self._print_rollout_samples(gen_batch_output, phase="train")
+                        except Exception as exc:
+                            self._report_progress(f"[samples] training print failed: {exc}")
                     if self.config.algorithm.adv_estimator == AdvantageEstimator.REMAX:
                         with _timer("gen_max", timing_raw):
                             gen_baseline_batch = deepcopy(gen_batch)
@@ -1140,6 +1228,7 @@ class RayPPOTrainer:
 
                     # recompute old_log_probs
                     with _timer("old_log_prob", timing_raw):
+                        self._report_progress(f"[training] step={self.global_steps} log probabilities started")
                         old_log_prob = self.actor_rollout_wg.compute_log_prob(batch)
                         entropys = old_log_prob.batch["entropys"]
                         response_masks = batch.batch["response_mask"]
@@ -1246,6 +1335,7 @@ class RayPPOTrainer:
                     if self.config.trainer.critic_warmup <= self.global_steps:
                         # update actor
                         with _timer("update_actor", timing_raw):
+                            self._report_progress(f"[training] step={self.global_steps} actor update started")
                             batch.meta_info["multi_turn"] = self.config.actor_rollout_ref.rollout.multi_turn.enable
                             actor_output = self.actor_rollout_wg.update_actor(batch)
                         actor_output_metrics = reduce_metrics(actor_output.meta_info["metrics"])
@@ -1295,6 +1385,10 @@ class RayPPOTrainer:
 
                 # TODO: make a canonical logger that supports various backend
                 logger.log(data=metrics, step=self.global_steps)
+                self._report_progress(
+                    f"[training] step={self.global_steps}/{self.total_training_steps} logged "
+                    f"elapsed={time.monotonic() - step_started:.1f}s"
+                )
 
                 progress_bar.update(1)
                 self.global_steps += 1
