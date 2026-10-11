@@ -1,3 +1,32 @@
+#!/usr/bin/env bash
+
+repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 1
+cd -- "$repo_root" || exit 1
+
+# Shared data is provisioned separately under <repo>/data/webshop.
+webshop_root="$repo_root/agent_system/environments/env_package/webshop/webshop"
+ensure_webshop_link() {
+    local link_path="$1"
+    local target="$2"
+    if [ ! -e "$link_path" ] && [ ! -L "$link_path" ]; then
+        ln -s -- "$target" "$link_path" || return 1
+    fi
+    if [ ! -d "$link_path" ]; then
+        echo "WebShop data directory is missing or its symlink is broken: $link_path" >&2
+        echo "Expected shared data under $repo_root/data/webshop." >&2
+        return 1
+    fi
+}
+
+ensure_webshop_link "$webshop_root/data" "../../../../../data/webshop" || exit 1
+ensure_webshop_link "$webshop_root/search_engine/indexes" "../../../../../../data/webshop/search_engine/indexes" || exit 1
+# Also connect optional indexes when those product subsets are available.
+for index_name in indexes_100 indexes_1k indexes_100k; do
+    if [ -d "$repo_root/data/webshop/search_engine/$index_name" ]; then
+        ensure_webshop_link "$webshop_root/search_engine/$index_name" "../../../../../../data/webshop/search_engine/$index_name" || exit 1
+    fi
+done
+
 set -x
 
 # 使用镜像：`whatcanyousee/verl:ngc-cu124-vllm0.8.5-sglang0.4.6-mcore0.12.0-te2.`
@@ -24,7 +53,6 @@ ENGINE=${1:-vllm}
 # vLLM 0.11's XFORMERS paged-KV path can fail with its 16-token cache blocks.
 export VLLM_ATTENTION_BACKEND=FLASH_ATTN
 export RAY_DEDUP_LOGS=0
-repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)
 
 num_cpus_per_env_worker=0.1 # The CPU resource allocated for each environment worker. If you want to use less CPU resources, you can decrease this value.
 
