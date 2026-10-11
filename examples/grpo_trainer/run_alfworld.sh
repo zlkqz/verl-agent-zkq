@@ -80,8 +80,8 @@ python3 -u -m verl.trainer.main_ppo \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
     actor_rollout_ref.rollout.log_prob_micro_batch_size_per_gpu=$micro_bs_per_gpu \
-    actor_rollout_ref.rollout.max_num_batched_tokens=400000 \
-    actor_rollout_ref.rollout.tensor_model_parallel_size=2 \
+    actor_rollout_ref.rollout.max_num_batched_tokens=300000 \
+    actor_rollout_ref.rollout.tensor_model_parallel_size=1 \
     actor_rollout_ref.actor.fsdp_config.fsdp_size=4 \
     actor_rollout_ref.rollout.name=$ENGINE \
     actor_rollout_ref.rollout.temperature=$train_temperature \
