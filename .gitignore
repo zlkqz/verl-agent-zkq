@@ -8,7 +8,6 @@
 **/*.tar.gz
 **/playground
 **/wandb
-/agent_system/environments/env_package/webshop/webshop/data
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -129,7 +128,7 @@ log
 outputs
 
 # appworld
-data/
+/data/
 .tmp
 *ports
 
