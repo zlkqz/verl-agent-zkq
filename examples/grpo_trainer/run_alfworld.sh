@@ -2,17 +2,23 @@ set -x
 
 # 使用镜像：`verlai/verl:vllm011.latest`
 
-export http_proxy=http://124.16.138.148:7890
-export https_proxy=http://124.16.138.148:7890
-export all_proxy=socks5://124.16.138.148:7890
-export HTTP_PROXY=http://124.16.138.148:7890
-export HTTPS_PROXY=http://124.16.138.148:7890
-export ALL_PROXY=socks5://124.16.138.148:7890
-export NO_PROXY_LIST=localhost,127.0.0.1,127.0.1.1,::1,0.0.0.0,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,.local,.lan,.internal,.cluster.local,kubernetes.default.svc
-export no_proxy="$NO_PROXY_LIST"
-export NO_PROXY="$NO_PROXY_LIST"
+# export http_proxy=http://124.16.138.148:7890
+# export https_proxy=http://124.16.138.148:7890
+# export all_proxy=socks5://124.16.138.148:7890
+# export HTTP_PROXY=http://124.16.138.148:7890
+# export HTTPS_PROXY=http://124.16.138.148:7890
+# export ALL_PROXY=socks5://124.16.138.148:7890
+# export NO_PROXY_LIST=localhost,127.0.0.1,127.0.1.1,::1,0.0.0.0,10.0.0.0/8,172.16.0.0/12,192.168.0.0/16,169.254.0.0/16,.local,.lan,.internal,.cluster.local,kubernetes.default.svc
+# export no_proxy="$NO_PROXY_LIST"
+# export NO_PROXY="$NO_PROXY_LIST"
 
-wandb login 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
+export http_proxy=http://100.98.216.198:9000
+export https_proxy=http://100.98.216.198:9000
+export HTTP_PROXY=$http_proxy
+export HTTPS_PROXY=$https_proxy
+
+# wandb login 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
+/usr/local/bin/wandb login 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
 
 ENGINE=${1:-vllm}
 # vLLM 0.11's XFORMERS paged-KV path can fail with its 16-token cache blocks.
@@ -28,15 +34,18 @@ val_data_size=128
 group_size=8
 train_temperature=0.8
 train_top_p=0.95
-max_prompt_length=2048
-max_response_length=2048
+max_prompt_length=4096
+max_response_length=4096
 lr=1e-6
 val_before_train=False
 project_name=p2o_agent_exp
-micro_bs_per_gpu=8
+micro_bs_per_gpu=4
+# model_path=/ceph_home/arknet/hf_models/Qwen/Qwen3-8B
+model_path=/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/Qwen3-8B
 
 EXP_NAME="p2o_alfworld_qwen3_8b_think_bs_${train_data_size}x${group_size}_temperature${train_temperature}_length${max_prompt_length}+${max_response_length}_lr${lr}"
-save_path=/ceph_home/zhangkaiqi2024/saved_models/p2o-agent/${EXP_NAME}
+# save_path=/ceph_home/zhangkaiqi2024/saved_models/p2o-agent/${EXP_NAME}
+save_path=/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/saved_models/p2o-agent/${EXP_NAME}
 
 mkdir -p logs/
 
@@ -61,7 +70,7 @@ python3 -u -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.return_raw_chat=True \
-    actor_rollout_ref.model.path=/ceph_home/arknet/hf_models/Qwen/Qwen3-8B \
+    actor_rollout_ref.model.path=$model_path \
     actor_rollout_ref.actor.optim.lr=$lr \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=64 \
@@ -77,7 +86,7 @@ python3 -u -m verl.trainer.main_ppo \
     actor_rollout_ref.rollout.name=$ENGINE \
     actor_rollout_ref.rollout.temperature=$train_temperature \
     actor_rollout_ref.rollout.top_p=$train_top_p \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.7 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=0.75 \
     actor_rollout_ref.rollout.enable_chunked_prefill=False \
     actor_rollout_ref.rollout.enforce_eager=False \
     actor_rollout_ref.rollout.free_cache_engine=False \
@@ -104,5 +113,5 @@ python3 -u -m verl.trainer.main_ppo \
     trainer.nnodes=1 \
     trainer.save_freq=20 \
     trainer.test_freq=20 \
-    trainer.total_epochs=200 \
+    trainer.total_epochs=400 \
     trainer.val_before_train=$val_before_train "${@:3}" > "logs/${EXP_NAME}.log" 2>&1
