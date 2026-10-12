@@ -148,7 +148,9 @@ class AlfWorldEnvironmentManager(EnvironmentManagerBase):
         return {'text': full_text_obs, 'image': image_obs, 'anchor': text_obs}, infos
     
     def step(self, text_actions: List[str]):
-        actions, valids = self.projection_f(text_actions, self.envs.get_admissible_commands)
+        actions, valids, diagnostics = self.projection_f(
+            text_actions, self.envs.get_admissible_commands, return_diagnostics=True
+        )
         text_obs, image_obs, rewards, dones, infos = self.envs.step(actions)
         self.memory.store({'text_obs': self.pre_text_obs, 'action': actions})
         self.pre_text_obs = text_obs
@@ -160,6 +162,7 @@ class AlfWorldEnvironmentManager(EnvironmentManagerBase):
         # add action_valid to infos
         for i, info in enumerate(infos):
             info['is_action_valid'] = to_numpy(valids[i])
+            info.update(diagnostics[i])
 
         next_observations = {'text': full_text_obs, 'image': image_obs, 'anchor': text_obs}
         rewards = to_numpy(rewards)
@@ -396,14 +399,18 @@ class WebshopEnvironmentManager(EnvironmentManagerBase):
                         'image': None, 
                         'anchor': obs.copy()
                         }
+        self.available_actions = [info["available_actions"] for info in infos]
         self.pre_text_obs = obs
         self.memory.reset(batch_size = len(infos))
         return observations, infos
 
     def step(self, text_actions: List[str]):
-        actions, valids = self.projection_f(text_actions)
+        actions, valids, diagnostics = self.projection_f(
+            text_actions, available_actions=self.available_actions, return_diagnostics=True
+        )
         next_obs, rewards, dones, infos = self.envs.step(actions)
 
+        self.available_actions = [info["available_actions"] for info in infos]
         next_obs = self.format_obs(next_obs)
 
         self.memory.store({'text_obs': self.pre_text_obs, 'action': actions})
@@ -417,6 +424,7 @@ class WebshopEnvironmentManager(EnvironmentManagerBase):
         # add action_valid to infos
         for i, info in enumerate(infos):
             info['is_action_valid'] = to_numpy(valids[i])
+            info.update(diagnostics[i])
 
         rewards = to_numpy(rewards)
         dones = to_numpy(dones)

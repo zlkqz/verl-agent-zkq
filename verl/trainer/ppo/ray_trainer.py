@@ -48,6 +48,9 @@ from verl.single_controller.ray import RayClassWithInitArgs, RayResourcePool, Ra
 from verl.single_controller.ray.base import create_colocated_worker_cls
 from verl.trainer.ppo import core_algos
 from verl.trainer.ppo.core_algos import agg_loss
+from verl.trainer.ppo.agent_diagnostics import (
+    ACTION_DIAGNOSTICS, action_metrics, advantage_metrics, compute_agent_grpo,
+)
 from verl.trainer.ppo.metric_utils import (
     compute_data_metrics,
     compute_throughout_metrics,
@@ -202,6 +205,7 @@ def apply_kl_penalty(data: DataProto, kl_ctrl: core_algos.AdaptiveKLController, 
 
 def apply_invalid_action_penalty(data: DataProto, invalid_action_penalty_coef=float):
     reward_tensor = data.batch['token_level_scores']
+    data.batch['invalid_action_penalties'] = torch.zeros(len(data), dtype=reward_tensor.dtype, device=reward_tensor.device)
     if 'step_rewards' in data.batch.keys():
         step_rewards = data.batch['step_rewards']
     for i in range(len(data)):
@@ -215,6 +219,7 @@ def apply_invalid_action_penalty(data: DataProto, invalid_action_penalty_coef=fl
 
         action_valids = data_item.non_tensor_batch['is_action_valid'].astype(np.float32)
         action_invalids = torch.tensor(1 - action_valids, dtype=torch.float32, device=prompt_ids.device).squeeze(0)
+        data.batch["invalid_action_penalties"][i] = -invalid_action_penalty_coef * action_invalids
         # invalid action penalty
         # assert reward_tensor[i, valid_response_length - 1] != 0.0, f'i={i}'
         reward_tensor[i, valid_response_length - 1] -= invalid_action_penalty_coef * action_invalids
@@ -290,14 +295,28 @@ def compute_advantage(data: DataProto, adv_estimator, gamma=1.0, lam=1.0, num_re
             # If multi-turn, replace the mask with the relevant part of loss_mask
             response_length = grpo_calculation_mask.size(1)  # Get length from the initial response mask
             grpo_calculation_mask = data.batch["loss_mask"][:, -response_length:]  # This mask is the one intended for GRPO
-        # Call compute_grpo_outcome_advantage with parameters matching its definition
-        advantages, returns = core_algos.compute_grpo_outcome_advantage(
-            token_level_rewards=data.batch["token_level_rewards"],
-            response_mask=grpo_calculation_mask,
-            index=data.non_tensor_batch["uid"],
-            traj_index=data.non_tensor_batch['traj_uid'],
-            norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
-        )
+        if kwargs.get("kl_in_reward", False) and (kwargs.get("grpo_reward_grouping", "step") != "step"
+                                                   or kwargs.get("grpo_invalid_penalty_mode", "joint") != "joint"):
+            raise ValueError("Agent GRPO ablations support actor KL loss, not KL in rewards")
+        # Scalar task rewards and penalties are kept separate until advantage computation.
+        if "task_rewards" in data.batch and not kwargs.get("kl_in_reward", False):
+            advantages, diagnostics = compute_agent_grpo(
+                task_rewards=data.batch["task_rewards"],
+                penalties=data.batch.get("invalid_action_penalties", torch.zeros_like(data.batch["task_rewards"])),
+                response_mask=grpo_calculation_mask,
+                non_tensor=data.non_tensor_batch,
+                grouping=kwargs.get("grpo_reward_grouping", "step"),
+                penalty_mode=kwargs.get("grpo_invalid_penalty_mode", "joint"),
+                normalize=norm_adv_by_std_in_grpo,
+            )
+            data.meta_info["grpo_diagnostics"] = diagnostics
+            returns = advantages
+        else:
+            advantages, returns = core_algos.compute_grpo_outcome_advantage(
+                token_level_rewards=data.batch["token_level_rewards"],
+                response_mask=grpo_calculation_mask, index=data.non_tensor_batch["uid"],
+                traj_index=data.non_tensor_batch["traj_uid"], norm_adv_by_std_in_grpo=norm_adv_by_std_in_grpo,
+            )
         data.batch["advantages"] = advantages
         data.batch["returns"] = returns
     elif adv_estimator == AdvantageEstimator.GRPO_PASSK:
@@ -751,6 +770,7 @@ class RayPPOTrainer:
         tool_calling_list = []
         traj_uid_list = []
         success_rate_dict = {}
+        validation_diagnostics = defaultdict(list)
 
         # Lists to collect samples for the table
         sample_inputs = []
@@ -826,6 +846,9 @@ class RayPPOTrainer:
                 self._report_progress(f"[samples] validation print failed: {exc}")
             del test_batch
             test_batch = test_output_gen_batch
+            for key in ACTION_DIAGNOSTICS:
+                if key in test_batch.non_tensor_batch:
+                    validation_diagnostics[key].extend(test_batch.non_tensor_batch[key].tolist())
             # Store generated outputs
             output_ids = test_output_gen_batch.batch["responses"]
             output_texts = [self.tokenizer.decode(ids, skip_special_tokens=True) for ids in output_ids]
@@ -898,6 +921,8 @@ class RayPPOTrainer:
         for k, v in success_rate.items():
             metric_dict[f'val/{k}'] = v
 
+        for key, values in validation_diagnostics.items():
+            metric_dict[f"val/{key}/mean"] = float(np.mean(values))
         return metric_dict
 
     def init_workers(self):
@@ -1236,6 +1261,7 @@ class RayPPOTrainer:
                         entropy_loss = agg_loss(loss_mat=entropys, loss_mask=response_masks, loss_agg_mode=loss_agg_mode)
                         old_log_prob_metrics = {"actor/entropy_loss": entropy_loss.detach().item()}
                         metrics.update(old_log_prob_metrics)
+                        metrics["actor/entropy_coeff"] = self.config.actor_rollout_ref.actor.entropy_coeff
                         old_log_prob.batch.pop("entropys")
                         batch = batch.union(old_log_prob)
 
@@ -1284,6 +1310,7 @@ class RayPPOTrainer:
                         if self.config.reward_model.launch_reward_fn_async:
                             reward_tensor, reward_extra_infos_dict = ray.get(future_reward)
                         batch.batch["token_level_scores"] = reward_tensor
+                        batch.batch["task_rewards"] = reward_tensor.sum(-1).clone()
 
                         print(f"{list(reward_extra_infos_dict.keys())=}")
                         if reward_extra_infos_dict:
@@ -1319,10 +1346,17 @@ class RayPPOTrainer:
                             pf_ppo_reweight_method=self.config.algorithm.pf_ppo.reweight_method,
                             pf_ppo_weight_pow=self.config.algorithm.pf_ppo.weight_pow,
                             step_advantage_w=self.config.algorithm.gigpo.step_advantage_w,
+                            kl_in_reward=self.config.algorithm.use_kl_in_reward,
+                            grpo_reward_grouping=self.config.algorithm.get("grpo", {}).get("reward_grouping", "step"),
+                            grpo_invalid_penalty_mode=self.config.algorithm.get("grpo", {}).get("invalid_penalty_mode", "joint"),
                             gigpo_mode=self.config.algorithm.gigpo.mode,
                             gigpo_enable_similarity= self.config.algorithm.gigpo.enable_similarity,
                             gigpo_similarity_thresh=self.config.algorithm.gigpo.similarity_thresh,
                         )
+
+                    metrics.update(batch.meta_info.pop("grpo_diagnostics", {}))
+                    metrics.update(action_metrics(batch.non_tensor_batch))
+                    metrics.update(advantage_metrics(batch.batch["advantages"], batch.batch["response_mask"], batch.non_tensor_batch))
 
                     # update critic
                     if self.use_critic:

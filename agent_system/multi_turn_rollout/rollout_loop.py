@@ -404,6 +404,11 @@ class TrajectoryCollector:
                     flush=True,
                 )
             assert len(rewards) == batch_size, f"env should return rewards for all environments, got {len(rewards)} rewards for {batch_size} environments"
+            batch.non_tensor_batch['turn_index'] = np.full(batch_size, _step, dtype=np.int64)
+            for diagnostic in ("action_format_valid", "action_syntax_valid", "action_executable",
+                               "think_tags_complete", "response_has_cjk", "think_open_count", "think_close_count"):
+                if diagnostic in infos[0]:
+                    batch.non_tensor_batch[diagnostic] = np.array([info[diagnostic] for info in infos])
             batch.non_tensor_batch['rewards'] = torch_to_numpy(rewards, is_object=True)
             batch.non_tensor_batch['active_masks'] = torch_to_numpy(active_masks, is_object=True)
             

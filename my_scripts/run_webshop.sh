@@ -18,16 +18,20 @@ ensure_webshop_link() {
     fi
 }
 
-ensure_webshop_link "$webshop_root/data" "../../../../../data/webshop" || exit 1
-ensure_webshop_link "$webshop_root/search_engine/indexes" "../../../../../../data/webshop/search_engine/indexes" || exit 1
-# Also connect optional indexes when those product subsets are available.
-for index_name in indexes_100 indexes_1k indexes_100k; do
-    if [ -d "$repo_root/data/webshop/search_engine/$index_name" ]; then
-        ensure_webshop_link "$webshop_root/search_engine/$index_name" "../../../../../../data/webshop/search_engine/$index_name" || exit 1
-    fi
-done
+if [[ ${DRY_RUN:-0} != 1 ]]; then
+    ensure_webshop_link "$webshop_root/data" "../../../../../data/webshop" || exit 1
+    ensure_webshop_link "$webshop_root/search_engine/indexes" "../../../../../../data/webshop/search_engine/indexes" || exit 1
+    # Also connect optional indexes when those product subsets are available.
+    for index_name in indexes_100 indexes_1k indexes_100k; do
+        if [ -d "$repo_root/data/webshop/search_engine/$index_name" ]; then
+            ensure_webshop_link "$webshop_root/search_engine/$index_name" "../../../../../../data/webshop/search_engine/$index_name" || exit 1
+        fi
+    done
+fi
 
-set -x
+if [[ ${DRY_RUN:-0} != 1 ]]; then
+    set -x
+fi
 
 # 使用镜像：`whatcanyousee/verl:ngc-cu124-vllm0.8.5-sglang0.4.6-mcore0.12.0-te2.`
 
@@ -47,7 +51,9 @@ export HTTP_PROXY=$http_proxy
 export HTTPS_PROXY=$https_proxy
 
 # wandb login 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
-/usr/local/bin/wandb login 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
+if [[ ${DRY_RUN:-0} != 1 ]]; then
+    /usr/local/bin/wandb login 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
+fi
 
 ENGINE=${1:-vllm}
 # vLLM 0.11's XFORMERS paged-KV path can fail with its 16-token cache blocks.
@@ -68,14 +74,20 @@ lr=1e-6
 val_before_train=False
 project_name=p2o_agent_exp
 micro_bs_per_gpu=4
+# Dedicated ablation scripts override only these experiment settings.
+mini_batch_size=${mini_batch_size:-256}
+entropy_coeff=${entropy_coeff:-0.0}
+use_kl_loss=${use_kl_loss:-False}
+kl_loss_coef=${kl_loss_coef:-0.001}
+grpo_reward_grouping=${grpo_reward_grouping:-step}
+grpo_invalid_penalty_mode=${grpo_invalid_penalty_mode:-joint}
 # model_path=/ceph_home/arknet/hf_models/Qwen/Qwen3-8B
 model_path=/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/Qwen3-8B
 
-EXP_NAME="p2o_webshop_qwen3_8b_think_bs_${train_data_size}x${group_size}_temperature${train_temperature}_length${max_prompt_length}+${max_response_length}_lr${lr}"
+EXP_NAME="p2o_webshop_qwen3_8b_think_bs_${train_data_size}x${group_size}_mini_batch_${mini_batch_size}_temperature${train_temperature}_length${max_prompt_length}+${max_response_length}_lr${lr}${EXP_NAME_SUFFIX:-}"
 # save_path=/ceph_home/zhangkaiqi2024/saved_models/p2o-agent/${EXP_NAME}
 save_path=/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/saved_models/p2o-agent/${EXP_NAME}
 
-mkdir -p logs/
 
 echo $EXP_NAME
 echo "save_path=$save_path"
@@ -87,8 +99,10 @@ echo "save_path=$save_path"
 #     --train_data_size $train_data_size \
 #     --val_data_size $val_data_size
 
-python3 -u -m verl.trainer.main_ppo \
+cmd=(python3 -u -m verl.trainer.main_ppo \
     algorithm.adv_estimator=grpo \
+    algorithm.grpo.reward_grouping=$grpo_reward_grouping \
+    algorithm.grpo.invalid_penalty_mode=$grpo_invalid_penalty_mode \
     data.train_files="$repo_root/data/webshop/text/train.parquet" \
     data.val_files="$repo_root/data/webshop/text/test.parquet" \
     data.train_batch_size=$train_data_size \
@@ -101,9 +115,11 @@ python3 -u -m verl.trainer.main_ppo \
     actor_rollout_ref.model.path=$model_path \
     actor_rollout_ref.actor.optim.lr=$lr \
     actor_rollout_ref.model.use_remove_padding=True \
-    actor_rollout_ref.actor.ppo_mini_batch_size=64 \
+    actor_rollout_ref.actor.ppo_mini_batch_size=$mini_batch_size \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=$micro_bs_per_gpu \
-    actor_rollout_ref.actor.use_kl_loss=False \
+    actor_rollout_ref.actor.use_kl_loss=$use_kl_loss \
+    actor_rollout_ref.actor.kl_loss_coef=$kl_loss_coef \
+    actor_rollout_ref.actor.entropy_coeff=$entropy_coeff \
     actor_rollout_ref.model.enable_gradient_checkpointing=True \
     actor_rollout_ref.actor.fsdp_config.param_offload=False \
     actor_rollout_ref.actor.fsdp_config.optimizer_offload=False \
@@ -142,4 +158,14 @@ python3 -u -m verl.trainer.main_ppo \
     trainer.save_freq=20 \
     trainer.test_freq=20 \
     trainer.total_epochs=400 \
-    trainer.val_before_train=$val_before_train "${@:3}" > "logs/${EXP_NAME}.log" 2>&1
+    trainer.resume_mode=disable \
+    trainer.val_before_train=$val_before_train "${@:2}"
+)
+
+if [[ ${DRY_RUN:-0} == 1 ]]; then
+    printf '%q ' "${cmd[@]}"
+    printf '\n'
+    exit 0
+fi
+mkdir -p logs/
+"${cmd[@]}" > "logs/${EXP_NAME}.log" 2>&1

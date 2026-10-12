@@ -13,52 +13,50 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
 import re
 
-def webshop_projection(actions: List[str]):
+
+def webshop_projection(actions, available_actions=None, return_diagnostics=False):
+    """Parse one action and check it against the PRE-action page.
+
+    Reasoning language/think tags are diagnostics, never action validity rules.
+    Search is supported from any page by WebAgentTextEnv; click[search] is a no-op.
+    Invalid outputs become an empty (no-op) action, never an arbitrary suffix.
     """
-    A function to process the actions.
-    actions: the list of actions to be processed, it is a list of strings.
-    Expected format:
-        <think>some reasoning...</think><action>up/down/left/right/still</action>
-    """
-
-    valids = [0] * len(actions)
-
-    for i in range(len(actions)):
-        original_str = actions[i]  # keep the original string
-        actions[i] = actions[i].lower()
-
-        # Attempt to extract the substring within <action>...</action>
-        start_tag = "<action>"
-        end_tag = "</action>"
-        start_idx = actions[i].find(start_tag)
-        end_idx = actions[i].find(end_tag)
-        try:
-            if start_idx == -1 or end_idx == -1:
-                # If we can't find a valid <action>...</action> block, mark as invalid
-                actions[i] = actions[i][-20:]  # 0 is invalid action for Sokoban
-                continue
-
-            # Extract just the content between the tags
-            extracted_action = actions[i][start_idx + len(start_tag):end_idx].strip().lower()
-            
-            actions[i] = extracted_action
-            valids[i] = 1
-
-        except:
-            # randomly choose an action from the action list if illegal
-            actions[i] = actions[i][-20:]
-
-        # check <think>...</think>
-        think_start_idx = original_str.find("<think>")
-        think_end_idx = original_str.find("</think>")
-        if think_start_idx == -1 or think_end_idx == -1:
-            valids[i] = 0
-
-        # check if contains any Chinese characters
-        if re.search(r'[\u4e00-\u9fff]', original_str):
-            valids[i] = 0
-
-    return actions, valids
+    if available_actions is not None and len(available_actions) != len(actions):
+        raise ValueError("One available-actions entry is required per response")
+    parsed, valids, diagnostics = [], [], []
+    for i, text in enumerate(actions):
+        blocks = re.findall(r"<action>(.*?)</action>", text, flags=re.I | re.S)
+        format_valid = (len(blocks) == 1
+                        and len(re.findall(r"</?action\b[^>]*>", text, re.I)) == 2)
+        match = re.fullmatch(r"(search|click)\[([^\[\]\r\n]+)\]",
+                             blocks[0].strip(), flags=re.I) if format_valid else None
+        syntax_valid = match is not None and bool(match.group(2).strip())
+        action = ""
+        executable = False
+        if syntax_valid:
+            name, argument = match.group(1).lower(), match.group(2).strip().lower()
+            action = f"{name}[{argument}]"
+            if name == "search":
+                executable = True
+            elif available_actions is not None:
+                executable = argument != "search" and argument in available_actions[i]["clickables"]
+            else:
+                # Without page state this API can only validate syntax.
+                executable = argument != "search"
+        valid = bool(format_valid and syntax_valid and executable)
+        parsed.append(action if valid else "")
+        valids.append(valid)
+        diagnostics.append({
+            "action_format_valid": bool(format_valid),
+            "action_syntax_valid": bool(syntax_valid),
+            "action_executable": bool(executable),
+            "think_tags_complete": bool(re.search(r"<think>.*?</think>", text, re.S)),
+            "think_open_count": text.count("<think>"),
+            "think_close_count": text.count("</think>"),
+            "response_has_cjk": bool(re.search(r"[\u4e00-\u9fff]", text)),
+        })
+    if return_diagnostics:
+        return parsed, valids, diagnostics
+    return parsed, valids

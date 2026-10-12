@@ -13,50 +13,44 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import List
 import re
 
-def alfworld_projection(actions: List[str], action_pools: List[List[str]]):
+
+def alfworld_projection(actions, action_pools, return_diagnostics=False):
+    """Parse a single action and check the PRE-action admissible commands.
+
+    Commands are supplied by ALFWorld rather than a duplicated command grammar.
+    Thinking tags and reasoning language are diagnostics, not validity rules.
+    Invalid responses yield an empty command instead of executing a text suffix.
     """
-    An function to process the actions
-    actions: the list of actions to be processeed, it is a list of strings.
-    action_pools: the list of action pools, each pool is a list of strings.
-    """
+    if len(action_pools) != len(actions):
+        raise ValueError("One admissible-actions entry is required per response")
 
-    valids = [0] * len(actions)
+    parsed, valids, diagnostics = [], [], []
+    for text, pool in zip(actions, action_pools):
+        blocks = re.findall(r"<action>(.*?)</action>", text, flags=re.I | re.S)
+        format_valid = (len(blocks) == 1
+                        and len(re.findall(r"</?action\b[^>]*>", text, re.I)) == 2)
+        action = blocks[0].strip().lower() if format_valid else ""
+        # Syntax only checks that the payload is one nonempty command line.
+        # The environment's command pool is authoritative for command semantics.
+        syntax_valid = bool(action) and not re.search(r"[\x00-\x1f\x7f<>]", action)
+        canonical_commands = {command.strip().lower(): command for command in (pool or ())}
+        executable = bool(syntax_valid and action in canonical_commands)
+        valid = bool(format_valid and syntax_valid and executable)
 
-    for i in range(len(actions)):
-        original_str = actions[i]  # keep the original string
-        actions[i] = actions[i].lower()
+        parsed.append(canonical_commands[action] if valid else "")
+        valids.append(valid)
+        diagnostics.append({
+            "action_format_valid": bool(format_valid),
+            "action_syntax_valid": bool(syntax_valid),
+            "action_executable": executable,
+            "think_tags_complete": bool(re.search(r"<think>.*?</think>", text, re.S)),
+            "think_open_count": text.count("<think>"),
+            "think_close_count": text.count("</think>"),
+            "response_has_cjk": bool(re.search(r"[\u4e00-\u9fff]", text)),
+        })
 
-        # Attempt to extract the substring within <action>...</action>
-        start_tag = "<action>"
-        end_tag = "</action>"
-        start_idx = actions[i].find(start_tag)
-        end_idx = actions[i].find(end_tag)
-        try:
-            if start_idx == -1 or end_idx == -1:
-                # If we can't find a valid <action>...</action> block, mark as invalid
-                actions[i] = actions[i][-30:]  # 0 is invalid action for Sokoban
-                continue
-
-            # Extract just the content between the tags
-            extracted_action = actions[i][start_idx + len(start_tag):end_idx].strip().lower()
-            
-            actions[i] = extracted_action
-            valids[i] = 1
-
-        except:
-            actions[i] = actions[i][-30:]
-
-        # check <think>...</think>
-        think_start_idx = original_str.find("<think>")
-        think_end_idx = original_str.find("</think>")
-        if think_start_idx == -1 or think_end_idx == -1:
-            valids[i] = 0
-
-        # check if contains any Chinese characters
-        if re.search(r'[\u4e00-\u9fff]', original_str):
-            valids[i] = 0
-
-    return actions, valids
+    if return_diagnostics:
+        return parsed, valids, diagnostics
+    return parsed, valids

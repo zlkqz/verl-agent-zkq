@@ -344,14 +344,14 @@ class DataParallelPPOActor(BasePPOActor):
                 # split batch into micro_batches
                 mini_batch = data
                 if has_multi_modal_inputs:
-                    self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
+                    self.gradient_accumulation = len(mini_batch) // self.config.ppo_micro_batch_size_per_gpu
                     num_micro_batches = mini_batch.batch.batch_size[0] // self.config.ppo_micro_batch_size_per_gpu
                     micro_batches = data.select(select_keys, non_tensor_select_keys).chunk(num_micro_batches)
                 elif self.config.use_dynamic_bsz:
                     max_token_len = self.config.ppo_max_token_len_per_gpu * self.ulysses_sequence_parallel_size
                     micro_batches, _ = rearrange_micro_batches(batch=mini_batch, max_token_len=max_token_len)
                 else:
-                    self.gradient_accumulation = self.config.ppo_mini_batch_size // self.config.ppo_micro_batch_size_per_gpu
+                    self.gradient_accumulation = len(mini_batch) // self.config.ppo_micro_batch_size_per_gpu
                     # split batch into micro_batches
                     micro_batches = mini_batch.split(self.config.ppo_micro_batch_size_per_gpu)
 
@@ -422,8 +422,9 @@ class DataParallelPPOActor(BasePPOActor):
                         kl_loss = agg_loss(loss_mat=kld, loss_mask=response_mask, loss_agg_mode=loss_agg_mode)
 
                         policy_loss = policy_loss + kl_loss * self.config.kl_loss_coef
-                        metrics["actor/kl_loss"] = kl_loss.detach().item()
-                        metrics["actor/kl_coef"] = self.config.kl_loss_coef
+                        append_to_dict(metrics, {"actor/kl_loss": kl_loss.detach().item(),
+                                                 "actor/kl_coef": self.config.kl_loss_coef,
+                                                 "actor/kl_penalty": kl_loss.detach().item() * self.config.kl_loss_coef})
 
                     if self.config.use_dynamic_bsz:
                         # relative to the dynamic bsz
@@ -433,6 +434,8 @@ class DataParallelPPOActor(BasePPOActor):
                     loss.backward()
 
                     data = {
+                        "actor/entropy_bonus": entropy_loss.detach().item() * entropy_coeff if entropy_coeff else 0.0,
+                        "actor/policy_loss": policy_loss.detach().item(),
                         "actor/pg_loss": pg_loss.detach().item(),
                         "actor/pg_clipfrac": pg_clipfrac.detach().item(),
                         "actor/ppo_kl": ppo_kl.detach().item(),
@@ -441,7 +444,9 @@ class DataParallelPPOActor(BasePPOActor):
                     append_to_dict(metrics, data)
 
                 grad_norm = self._optimizer_step()
-                data = {"actor/grad_norm": grad_norm.detach().item()}
+                data = {"actor/grad_norm": grad_norm.detach().item(),
+                        "actor/grad_clip_fraction": float(grad_norm.detach().item() > self.config.grad_clip)}
                 append_to_dict(metrics, data)
+        metrics["actor/optimizer_steps"] = [len(metrics.get("actor/grad_norm", []))]
         self.actor_optimizer.zero_grad()
         return metrics
