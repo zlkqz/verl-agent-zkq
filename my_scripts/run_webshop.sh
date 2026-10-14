@@ -3,6 +3,10 @@
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 1
 cd -- "$repo_root" || exit 1
 
+# Reduce glibc arena proliferation and return releasable heap memory sooner.
+export MALLOC_ARENA_MAX=${MALLOC_ARENA_MAX:-2}
+export MALLOC_TRIM_THRESHOLD_=${MALLOC_TRIM_THRESHOLD_:-131072}
+
 # Shared data is provisioned separately under <repo>/data/webshop.
 webshop_root="$repo_root/agent_system/environments/env_package/webshop/webshop"
 ensure_webshop_link() {

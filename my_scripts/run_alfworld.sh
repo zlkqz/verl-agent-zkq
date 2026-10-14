@@ -3,6 +3,10 @@
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 1
 cd -- "$repo_root" || exit 1
 
+# Reduce glibc arena proliferation and return releasable heap memory sooner.
+export MALLOC_ARENA_MAX=${MALLOC_ARENA_MAX:-2}
+export MALLOC_TRIM_THRESHOLD_=${MALLOC_TRIM_THRESHOLD_:-131072}
+
 if [[ ${DRY_RUN:-0} != 1 ]]; then
     set -x
 fi
