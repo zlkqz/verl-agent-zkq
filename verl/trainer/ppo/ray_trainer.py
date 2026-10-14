@@ -59,6 +59,7 @@ from verl.trainer.ppo.metric_utils import (
 )
 from verl.trainer.ppo.reward import compute_reward, compute_reward_async
 from verl.utils.checkpoint.checkpoint_manager import find_latest_ckpt_path
+from verl.utils.checkpoint.retention import has_hf_weights, prune_old_training_states, update_checkpoint_tracker, validate_fsdp_checkpoint
 from verl.utils.metric import (
     reduce_metrics,
 )
@@ -1023,6 +1024,18 @@ class RayPPOTrainer:
         max_actor_ckpt_to_keep = self.config.trainer.get("max_actor_ckpt_to_keep", None) if not remove_previous_ckpt_in_save else 1
         max_critic_ckpt_to_keep = self.config.trainer.get("max_critic_ckpt_to_keep", None) if not remove_previous_ckpt_in_save else 1
 
+        keep_latest_full = self.config.trainer.get("keep_latest_full_checkpoint", False)
+        if keep_latest_full:
+            # Worker retention deletes entire directories before saving. Delay
+            # cleanup until all roles and the dataloader have been committed.
+            max_actor_ckpt_to_keep = max_critic_ckpt_to_keep = None
+            required_contents = {"model", "optimizer", "extra", "hf_model"}
+            contents = self.config.actor_rollout_ref.actor.checkpoint.contents
+            if not required_contents.issubset(contents):
+                raise ValueError("keep_latest_full_checkpoint requires actor checkpoint.contents to include model, optimizer, extra, hf_model")
+            if self.use_critic and not required_contents.issubset(self.config.critic.checkpoint.contents):
+                raise ValueError("keep_latest_full_checkpoint requires critic checkpoint.contents to include model, optimizer, extra, hf_model")
+
         self.actor_rollout_wg.save_checkpoint(actor_local_path, actor_remote_path, self.global_steps, max_ckpt_to_keep=max_actor_ckpt_to_keep)
 
         if self.use_critic:
@@ -1035,10 +1048,21 @@ class RayPPOTrainer:
         dataloader_state_dict = self.train_dataloader.state_dict()
         torch.save(dataloader_state_dict, dataloader_local_path)
 
-        # latest checkpointed iteration tracker (for atomic usage)
-        local_latest_checkpointed_iteration = os.path.join(self.config.trainer.default_local_dir, "latest_checkpointed_iteration.txt")
-        with open(local_latest_checkpointed_iteration, "w") as f:
-            f.write(str(self.global_steps))
+        if keep_latest_full:
+            for role in (("actor", "critic") if self.use_critic else ("actor",)):
+                role_path = os.path.join(local_global_step_folder, role)
+                role_config = self.config.actor_rollout_ref.actor if role == "actor" else self.config.critic
+                if role_config.strategy in ("fsdp", "fsdp2"):
+                    worker_group = self.actor_rollout_wg if role == "actor" else self.critic_wg
+                    validate_fsdp_checkpoint(role_path, worker_group.world_size)
+                if not has_hf_weights(os.path.join(role_path, "huggingface")):
+                    raise RuntimeError(f"Incomplete {role} Hugging Face export in {local_global_step_folder}; previous checkpoint retained")
+            if not os.path.isfile(dataloader_local_path) or os.path.getsize(dataloader_local_path) == 0:
+                raise RuntimeError(f"Incomplete dataloader state in {local_global_step_folder}; previous checkpoint retained")
+
+        update_checkpoint_tracker(self.config.trainer.default_local_dir, self.global_steps)
+        if keep_latest_full:
+            prune_old_training_states(self.config.trainer.default_local_dir, self.global_steps)
 
     def _load_checkpoint(self):
         if self.config.trainer.resume_mode == "disable":

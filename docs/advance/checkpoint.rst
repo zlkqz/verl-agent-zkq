@@ -61,6 +61,35 @@ While **Megatron** current checkpoint structure is:
     │   │   └── rng_states
     └── latest_checkpointed_iteration.txt
 
+Keep Only the Latest Full Training Checkpoint
+--------------------------------------------
+
+The training scripts in ``my_scripts/`` enable automatic resume and set
+``trainer.keep_latest_full_checkpoint=True``. Each save includes model shards,
+optimizer, scheduler/RNG state, dataloader state, and a complete Hugging Face
+export at ``global_step_N/actor/huggingface/`` (also for the critic when enabled).
+This requires ``checkpoint.contents=[model,optimizer,extra,hf_model]`` for each
+training role.
+
+The trainer waits for all workers to finish saving, saves the dataloader state,
+checks all FSDP rank files and HF weight shards, and atomically updates
+``latest_checkpointed_iteration.txt``. Only then does it prune training files
+from older on-disk steps. Worker-side checkpoint limits are ignored in this mode
+so they cannot delete the previous checkpoint before the new save completes.
+A failed save leaves the previous checkpoint and tracker intact.
+
+Older steps with complete HF exports retain ``huggingface/`` (and any
+``lora_adapter/``). Legacy checkpoints without HF exports retain model shards
+and configuration/tokenizer files needed by ``scripts/model_merger.py``;
+their optimizer, extra state and dataloader files are removed. A config-only
+``huggingface/`` directory does not count as an exported model.
+
+For example, with a tracker pointing to step 120, the scripts resume step 120.
+Its training files remain throughout training and saving step 140. Only after
+step 140 has been saved successfully are training states from steps 20 through
+120 pruned. Step 140 remains fully resumable; on saving step 160, step 140
+retains only inference artifacts. No cleanup happens during resume itself.
+
 Convert FSDP and Megatron Checkpoints to HuggingFace Format Model
 -----------------------------------------------------------------
 

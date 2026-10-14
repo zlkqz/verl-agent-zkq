@@ -47,7 +47,7 @@ max_response_length=4096
 lr=1e-6
 val_before_train=False
 project_name=p2o_agent_exp
-micro_bs_per_gpu=4
+micro_bs_per_gpu=8
 # Dedicated ablation scripts override only these experiment settings.
 mini_batch_size=${mini_batch_size:-256}
 entropy_coeff=${entropy_coeff:-0.0}
@@ -88,6 +88,8 @@ cmd=(python3 -u -m verl.trainer.main_ppo \
     data.return_raw_chat=True \
     actor_rollout_ref.model.path=$model_path \
     actor_rollout_ref.actor.optim.lr=$lr \
+    actor_rollout_ref.actor.checkpoint.contents='[model,optimizer,extra,hf_model]' \
+    critic.checkpoint.contents='[model,optimizer,extra,hf_model]' \
     actor_rollout_ref.model.use_remove_padding=True \
     actor_rollout_ref.actor.ppo_mini_batch_size=$mini_batch_size \
     actor_rollout_ref.actor.ppo_micro_batch_size_per_gpu=$micro_bs_per_gpu \
@@ -132,7 +134,8 @@ cmd=(python3 -u -m verl.trainer.main_ppo \
     trainer.save_freq=20 \
     trainer.test_freq=20 \
     trainer.total_epochs=400 \
-    trainer.resume_mode=disable \
+    trainer.resume_mode=auto \
+    trainer.keep_latest_full_checkpoint=True \
     trainer.val_before_train=$val_before_train "${@:2}"
 )
 
