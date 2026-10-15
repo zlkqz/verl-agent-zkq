@@ -49,7 +49,7 @@ train_top_p=0.95
 max_prompt_length=3072
 max_response_length=3072
 lr=1e-6
-val_before_train=False
+val_before_train=True
 project_name=p2o_agent_exp
 micro_bs_per_gpu=8
 # Dedicated ablation scripts override only these experiment settings.

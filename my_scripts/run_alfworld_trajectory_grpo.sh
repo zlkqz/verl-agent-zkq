@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-mini_batch_size=64
+mini_batch_size=256
 grpo_reward_grouping=trajectory
 EXP_NAME_SUFFIX="_trajectory_grpo"
 
