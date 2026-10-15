@@ -1,17 +1,17 @@
 # P2O 在 ALFWorld / WebShop 上的实现计划
 
-更新日期：2026-10-15。状态：方法与代码阅读完成；本文是待实施方案，本次不修改训练代码、不启动训练。
+更新日期：2026-10-15。状态：用户已授权开始实现及使用本机8卡调试；TODO-00预检发现Python用户包覆盖问题，已暂停等待环境选择确认。训练代码尚未修改，未启动训练。
 
-本文是唯一移交材料：接手 Agent 不应假定能看到之前的对话。下面分别标明用户已确定的要求、代码阅读事实、工程建议和待讨论事项。本文出现的拟新增模块、配置键、数据结构和测试均尚未实现。
+本文是移交入口：接手 Agent 不应假定能看到之前的对话。实现与问题记录见 [implementation_log.md](p2o/implementation_log.md)，预检证据见 [TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)。下面分别标明用户已确定的要求、代码阅读事实、工程建议和待讨论事项。本文出现的拟新增业务模块、配置键、数据结构和测试均尚未实现。
 
 阅读基准：当前仓库 `a4f930c`；相邻 P2O 仓库 `92997e2`。论文采用用户提供的无版本 PDF 链接当前对应的 [arXiv v4](https://arxiv.org/pdf/2603.21877v4)，重点核对 §3、公式 4–6、附录 A–C。早期 v1 的表述不作为本次实现规范。
 
 
 ## 交接速览：继任者先读这一段
 
-这是**规划交付，不是已实现的P2O代码**。截至本次交接只新增/更新本文，训练代码未改、模型/环境/GPU功能测试未运行。所有15个大TODO（00–10、11A、11B、12、13）均未执行。文中的配置/API/新路径是待实现设计，不要直接当作已有命令运行。
+这是**实施中的计划，不是已实现的P2O代码**。目前完成仓库/资源/依赖预检与问题记录，训练代码未改、模型/环境/GPU功能测试未运行；仅检查了CUDA可用性与设备数。所有15个大TODO（00–10、11A、11B、12、13）均未通过验收；TODO-00在预检停点等待用户反馈。文中的配置/API/新路径是待实现设计，不要直接当作已有命令运行。
 
-接手顺序：先读§0的用户要求与路径，再读§2/§4–8的算法和数据合同、§12/§14.3的待决事项，最后执行§9。用户明确启动实现后，从**TODO-00公共接口与样例**开始；不可先一口气复制/修改所有模块，不可直接启动正式训练。每个大TODO完成并通过验收后向用户汇报、停止，得到继续指示再进入下一项。
+接手顺序：先读§0的用户要求与路径，再读§2/§4–8的算法和数据合同、§12/§14.3的待决事项及实现记录，最后执行§9。用户已明确启动实现，从**TODO-00公共接口与样例**开始；当前先处理预检问题P2O-ENV-001。不可先一口气复制/修改所有模块，不可直接启动正式训练。每个大TODO完成并通过验收后向用户汇报、停止，得到继续指示再进入下一项。
 
 状态标记：**用户已确认**是必须遵守的决策；**源码事实**是只读分析、需在当前checkout核对；**建议/提案**不是用户承诺，遇到语义选择先讨论。本文正文代表当前方案，历史否定句只用于防止回退旧设计；以后用户的新决定优先，先同步文档再做实现。§14提供完整要求覆盖表、剩余边界和交接检查结果，继任者不需要前面对话。
 
@@ -25,7 +25,7 @@
 
 用户是 P2O 论文作者之一，已在数学训练和评估上验证方法，现在要求在本仓库为 ALFWorld/WebShop 补充 agentic 实验。Math 源码用于理解算法及恢复逻辑；不能照搬单轮 prompt、reward、优势和任务身份处理。
 
-**当前授权仅是细化这份移交计划与 TODO LIST，不实现代码、不启动训练。**下文 TODO 留给后续继任者。最新要求覆盖前版中“直接改原 trainer”“默认精确复现所有随机状态”“固定训练 manifest”“每个原生 epoch 做 GEPA”的建议；这些旧建议不再是当前默认。
+**当前授权：用户已要求开始实现，并允许使用本机8张GPU调试；每完成一个大TODO或遇到需要讨论的问题必须暂停，等待反馈再继续。**不包含正式长训练授权。最新要求覆盖前版中“直接改原 trainer”“默认精确复现所有随机状态”“固定训练 manifest”“每个原生 epoch 做 GEPA”的建议；这些旧建议不再是当前默认。
 
 已确定的要求：
 
@@ -43,7 +43,7 @@
 12. dev按比例取，最低8、最高50，其余全部归train；比例暂建议25%。CRM默认采用B（复用rollout log-prob），生产路径不再额外重算带模板概率。
 13. 分别实现历史难样本预先加模板、当前组全失败后重试两种消融；共有环境/GEPA/评分/状态组件复用，控制流程用不同.py。
 
-实际模型位置由用户更新为 `/ceph_home/arknet/hf_models/Qwen/Qwen3-8B`，本次已确认路径存在。8 卡 A100 是用户给定的后续测试环境；显存是 40GB 还是 80GB、依赖版本及实际可用资源仍需继任者现场记录，不假定已做加载测试。
+实际模型位置由用户更新为 `/ceph_home/arknet/hf_models/Qwen/Qwen3-8B`，已重新确认路径存在。本机已核对为8张A100 80GB，预检时每卡占用10 MiB、利用率0%；驱动570.195.03。依赖与CUDA可用性见预检记录；未做模型加载或GPU计算测试。
 
 ### 0.2 工作区与模型路径
 
@@ -696,7 +696,7 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 ### 8.4 每做一件事就更新记录
 
-本文件是入口与当前计划；建议继任者创建 `docs/p2o/implementation_log.md` 与 `docs/p2o/test_records/<TODO编号>.md`，也可选择其他位置，但必须从本文链接过去。本次不创建这些实现记录，避免让空模板像已完成工作。
+本文件是入口与当前计划；实施记录为 [docs/p2o/implementation_log.md](p2o/implementation_log.md)，预检记录为 [docs/p2o/test_records/TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)。后续验收记录放在 `docs/p2o/test_records/<TODO编号>.md` 并从本文链接；预检不代表TODO实现或验收完成。
 
 每次发现计划与现实diff时先登记 `问题ID→预期→实际证据→影响的模块/TODO→可选改法→用户决定→验收变更`，暂停依赖实现；未经用户决定的提案保持待定，不能先实现后补文档。即使只是后面TODO的前提被推翻，也要当场说明。用户确认后在变更记录保留原因，正文替换为新方案。
 
@@ -704,12 +704,13 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 每个大TODO结束，更新状态、证据链接、剩余问题、下一TODO受影响部分；如果接口/随机化/CRM优化改变了后续假设，先改本文对应段落与验收，再往下做。保留简短决策变更记录，正文只保留当前设计，不叠加互相冲突的“新版说明”。
 
-## 9. 严格串行 TODO LIST（交给继任者，当前全部未执行）
+## 9. 严格串行 TODO LIST（当前均未验收，TODO-00预检暂停）
 
 **公共门槛：每一项都包含实现+测试+数据核验+文档更新+向用户汇报并停止。不得跳过上一项的门槛直接展开下一大模块，也不同时开多个大TODO。**用户发出继续指示后再进入下一项。遇到问题/测试失败或不确定，按§0.1停下来问用户；无GPU时不得把mock通过标为实机通过。后续有单机8卡A100和真实Qwen3-8B，可以做有界功能实验，但不启动正式长训练。
 
 ### [ ] TODO-00：公共合同模块与验收样例
 
+- **当前状态：**预检已完成，P2O-ENV-001等待用户确认执行环境；合同代码、样例与测试尚未创建。详见[预检记录](p2o/test_records/TODO-00-preflight.md)。
 - **实现范围：**contracts/types、sample_key/task_id/instance身份与历史状态合同、EnvAdapter协议、TaskRecipe/EvalInstance/Transition/EpisodeOutcome/ContextPair/TokenScores/P2OState，字段schema及版本；定义optional capability与异常类型，包括subset reset/step、terminal snapshot、原始token/logprob传递能力。先阅读两env真实输出，不先写整个trainer。
 - **输入→预期输出：**模拟一条ALFWorld和一条WebShop trace，均得到相同结构的EpisodeOutcome；缺失success/instance identity返回明确错误，不能补0。
 - **测试/数据核验：**序列化roundtrip；合法/非法schema；公共evaluator可用fake adapter执行而不识别任务名；train/dev sample_key隔离fixture（同key不同随机实例不得跨边）；所有后续模块的数据入口/出口能在合同中定位。
@@ -823,7 +824,7 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 ## 11. 本次交付状态与变更记录
 
-本次仍只更新这份.md。未复制入口/trainer，未创建上述模块/脚本/记录文件，未启动环境、模型、GPU测试或正式训练。全部TODO未勾选。已阅读的代码事实包括Math trainer差异/恢复逻辑、两个baseline及reward/advantage、SimpleMemory逐步构造、vLLM所采token的rollout_log_probs、actor重算与Math的重复base评分、环境随机化/auto-reset、Ray/FSDP固定拓扑。
+用户已启动实施；本轮仅完成预检、记录及计划原始版本git归档，尚未复制入口/trainer或创建业务模块/脚本。未启动环境、模型加载、GPU计算测试或正式训练，全部TODO未勾选。预检发现用户目录PyTorch覆盖conda包，默认CUDA初始化失败；临时禁用user-site的只读定位显示两套conda环境可识别8卡，环境选择尚待用户确认。详见[问题与实施记录](p2o/implementation_log.md)。已阅读的代码事实包括Math trainer差异/恢复逻辑、两个baseline及reward/advantage、SimpleMemory逐步构造、vLLM所采token的rollout_log_probs、actor重算与Math的重复base评分、环境随机化/auto-reset、Ray/FSDP固定拓扑。
 
 最新计划调整：
 
@@ -1021,9 +1022,9 @@ TODO-09保存这些RNG/版本、未提交base/rescue阶段和档案引用；恢�
 
 ### 14.4 交接时的实际状态与第一步
 
-- 当前产物仅此Markdown；代码、测试脚本、运行记录文件、checkpoint和新入口均未创建。15个大TODO均未执行，不要把代码阅读或文档检查勾成实现通过。
-- 本次收尾已通过文档检查：15个TODO全未勾选且顺序完整；阅读索引20个源码路径存在；模型路径存在；两仓库HEAD仍为a4f930c/92997e2；Markdown代码围栏配对、无空白错误；旧配置块及task+seed身份定义已清除。已审阅要求覆盖、身份/历史选择一致性、API与TODO依赖。未做环境/模型/GPU功能验证。
-- 交接时 `git status --short` 仅显示 `?? docs/p2o_agent_implementation_plan.md`，本文尚未纳入git提交；交接应确保实际传递此文件，不能只传当前commit。继任者工作区可能已有后续变化，接手时重新核对。
-- 用户正式要求开始实现后，继任者先只读核对AGENTS.md、两仓库HEAD与工作区差异、模型/数据/依赖/资源，记录环境基线，然后只开展TODO-00。若资源或代码与本文不符，先报告，不自动改计划。
+- 当前产物为本计划、实施日志及TODO-00预检记录；业务代码、测试脚本、checkpoint和新入口均未创建。15个大TODO均未通过验收，不要把代码阅读、CUDA设备可用性或文档检查勾成实现通过。
+- 实施前两仓库HEAD为a4f930c/92997e2，工作区唯一未跟踪文件为本计划；已以commit `0d4999d` 保存原始计划。未发现适用的AGENTS.md。模型路径存在，两个任务train/test parquet均读取为16/128行，与每epoch约一个16任务batch的规划一致；仍需TODO-01确认实际dataloader配置。
+- GPU资源已核对为8张A100 80GB，驱动570.195.03。默认conda Python被用户目录PyTorch 2.14.0覆盖而无法初始化CUDA；`PYTHONNOUSERSITE=1` 下verl环境PyTorch 2.6.0/cu124与verl_newer_vllm环境PyTorch 2.8.0/cu128均报告CUDA可用、8设备。仅为诊断，尚未选定正式执行环境，未改包或驱动。
+- 用户已要求开始实现并允许本机8卡调试；当前按§0.1/§13.10停在P2O-ENV-001，等待选择执行环境后继续TODO-00。方案建议优先使用禁用user-site的verl环境；具体命令、版本与可选路径见[预检记录](p2o/test_records/TODO-00-preflight.md)。
 - 参考P2O目录只读，所有实现放AGENT_ROOT；已有未提交改动属于用户/其他协作者，不能覆盖。本文作为唯一入口原位维护；新增日志文档后必须在本文链接，避免下一次接手遗漏。
 - TODO-00交付类型/API、最小两环境输入输出样例、序列化与错误合同验证，以及需用户确认的问题清单；完成后汇报并停止，不顺手进入TODO-01。
