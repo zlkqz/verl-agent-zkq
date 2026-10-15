@@ -1,6 +1,6 @@
 # P2O 在 ALFWorld / WebShop 上的实现计划
 
-更新日期：2026-10-15。状态：用户已授权开始实现及使用本机8卡调试，已指定ALFWorld/WebShop各自的本机容器（§0.2.1）；TODO-00待在指定容器内完成预检后继续。训练代码尚未修改，未启动训练。
+更新日期：2026-10-15。状态：用户已授权开始实现及使用本机8卡调试，已指定ALFWorld/WebShop各自的本机容器（§0.2.1）；容器内CUDA均可识别8卡，但访问挂载目录 `/ceph_home` 被拒绝，TODO-00停在P2O-ENV-002，等待用户选择临时测试路径或处理挂载。训练代码尚未修改，未启动训练。
 
 本文是移交入口：接手 Agent 不应假定能看到之前的对话。实现与问题记录见 [implementation_log.md](p2o/implementation_log.md)，预检证据见 [TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)。下面分别标明用户已确定的要求、代码阅读事实、工程建议和待讨论事项。本文出现的拟新增业务模块、配置键、数据结构和测试均尚未实现。
 
@@ -9,7 +9,7 @@
 
 ## 交接速览：继任者先读这一段
 
-这是**实施中的计划，不是已实现的P2O代码**。目前完成宿主机仓库/资源/依赖预检与问题记录，并按用户反馈登记两任务的容器；容器内预检尚未执行。训练代码未改、模型/环境/GPU功能测试未运行；仅在宿主机检查了CUDA可用性与设备数。所有15个大TODO（00–10、11A、11B、12、13）均未通过验收；TODO-00待继续。文中的配置/API/新路径是待实现设计，不要直接当作已有命令运行。
+这是**实施中的计划，不是已实现的P2O代码**。目前完成宿主机仓库/资源/依赖预检，以及两任务容器的状态、依赖metadata及CUDA设备发现检查；容器挂载访问检查失败，问题P2O-ENV-002待讨论。训练代码未改、模型/环境/GPU计算测试未运行。所有15个大TODO（00–10、11A、11B、12、13）均未通过验收；TODO-00尚未实现。文中的配置/API/新路径是待实现设计，不要直接当作已有命令运行。
 
 接手顺序：先读§0的用户要求与路径，再读§2/§4–8的算法和数据合同、§12/§14.3的待决事项及实现记录，最后执行§9。用户已明确启动实现，从**TODO-00公共接口与样例**开始；P2O-ENV-001的环境选择已由用户指定容器解决，下一步在对应容器内核对依赖、挂载及GPU可见性。不可先一口气复制/修改所有模块，不可直接启动正式训练。每个大TODO完成并通过验收后向用户汇报、停止，得到继续指示再进入下一项。
 
@@ -71,12 +71,12 @@
 
 | 任务 | 容器名称 | 信息来源与核验状态 |
 | --- | --- | --- |
-| ALFWorld | `verl_zhangkaiqi2024_alfworld` | 用户指定；本轮未进入容器核验 |
-| WebShop | `verl_zhangkaiqi2024_webshop` | 用户指定；本轮未进入容器核验 |
+| ALFWorld | `verl_zhangkaiqi2024_alfworld` | 用户指定；运行中，Python 3.12.11，PyTorch 2.8.0+cu128，vLLM 0.11.0，CUDA可见8卡；挂载访问失败 |
+| WebShop | `verl_zhangkaiqi2024_webshop` | 用户指定；运行中，Python 3.10.12，PyTorch 2.6.0/CUDA 12.4，vLLM 0.8.5.post1，CUDA可见8卡；挂载访问失败 |
 
 后续两任务的依赖检查、环境reset/step、模型/GPU功能测试及有界update，应在各自容器中执行，并记录容器内实际Python路径、依赖版本、CUDA/GPU可见性和执行命令。先核对容器状态及仓库、模型、数据、输出目录的挂载映射；上表§0.2的路径为宿主机已知位置，容器内路径以实际挂载为准。代码修改继续保存在目标仓库，确认容器运行的是该工作区的当前代码。
 
-此前宿主机的user-site/PyTorch覆盖诊断仅作历史定位证据，不代表这两个容器存在同一问题。后续使用用户指定容器；不再将宿主机conda环境或 `PYTHONNOUSERSITE=1` 作为默认执行方案。容器名称已确认，依赖、挂载及GPU功能是否可用仍需实测；本轮仅补充文档，未启动、重启或修改容器。
+此前宿主机的user-site/PyTorch覆盖诊断仅作历史定位证据，不代表这两个容器存在同一问题。后续使用用户指定容器；不再将宿主机conda环境或 `PYTHONNOUSERSITE=1` 作为默认执行方案。已在容器 `/tmp` 下读取依赖metadata并确认CUDA可见8卡；未验证GPU计算或模型加载。两个容器均配置 `/ceph_home:/ceph_home` 读写绑定，但容器内root和UID 1083均无法访问 `/ceph_home`，返回 `Permission denied`。原因尚未确认，未修改权限或挂载、未重启容器。P2O-ENV-002提案为TODO-00将必要源码暂存容器 `/tmp` 测试，或先处理挂载；用户选择前不执行提案。证据见[预检记录](p2o/test_records/TODO-00-preflight.md)。
 
 ### 0.3 数据和初始化入口
 
@@ -723,7 +723,7 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 ### [ ] TODO-00：公共合同模块与验收样例
 
-- **当前状态：**宿主机预检已完成，P2O-ENV-001环境选择已由用户指定两任务的本机容器解决（§0.2.1）；容器内预检待执行，合同代码、样例与测试尚未创建。详见[预检记录](p2o/test_records/TODO-00-preflight.md)。
+- **当前状态：**宿主机预检已完成，P2O-ENV-001环境选择已由用户指定两任务的本机容器解决（§0.2.1）；容器内依赖/设备发现已检查，挂载访问失败，P2O-ENV-002待讨论。合同代码、样例与测试尚未创建。详见[预检记录](p2o/test_records/TODO-00-preflight.md)。
 - **实现范围：**contracts/types、sample_key/task_id/instance身份与历史状态合同、EnvAdapter协议、TaskRecipe/EvalInstance/Transition/EpisodeOutcome/ContextPair/TokenScores/P2OState，字段schema及版本；定义optional capability与异常类型，包括subset reset/step、terminal snapshot、原始token/logprob传递能力。先阅读两env真实输出，不先写整个trainer。
 - **输入→预期输出：**模拟一条ALFWorld和一条WebShop trace，均得到相同结构的EpisodeOutcome；缺失success/instance identity返回明确错误，不能补0。
 - **测试/数据核验：**序列化roundtrip；合法/非法schema；公共evaluator可用fake adapter执行而不识别任务名；train/dev sample_key隔离fixture（同key不同随机实例不得跨边）；所有后续模块的数据入口/出口能在合同中定位。
@@ -837,7 +837,7 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 ## 11. 本次交付状态与变更记录
 
-用户已启动实施；目前仅完成宿主机预检、记录及计划原始版本git归档，随后按用户反馈补充两个任务的本机容器（§0.2.1），尚未复制入口/trainer或创建业务模块/脚本。未在容器内预检，未启动环境、模型加载、GPU计算测试或正式训练，全部TODO未勾选。宿主机预检发现用户目录PyTorch覆盖conda包，默认CUDA初始化失败；临时禁用user-site的只读定位显示两套conda环境可识别8卡。用户指定分别在ALFWorld/WebShop容器中运行，已替代此前的宿主机conda候选方案。详见[问题与实施记录](p2o/implementation_log.md)。已阅读的代码事实包括Math trainer差异/恢复逻辑、两个baseline及reward/advantage、SimpleMemory逐步构造、vLLM所采token的rollout_log_probs、actor重算与Math的重复base评分、环境随机化/auto-reset、Ray/FSDP固定拓扑。
+用户已启动实施；目前完成宿主机与容器预检及记录，尚未复制入口/trainer或创建业务模块/脚本。未启动环境、模型加载、GPU计算测试或正式训练，全部TODO未勾选。宿主机user-site覆盖问题已通过用户指定容器解决执行环境选择；两个容器均CUDA可见8卡，但无法访问 `/ceph_home` 挂载目录，当前按暂停要求等待P2O-ENV-002反馈。详见[问题与实施记录](p2o/implementation_log.md)。已阅读的代码事实包括Math trainer差异/恢复逻辑、两个baseline及reward/advantage、SimpleMemory逐步构造、vLLM所采token的rollout_log_probs、actor重算与Math的重复base评分、环境随机化/auto-reset、Ray/FSDP固定拓扑。
 
 最新计划调整：
 
@@ -1038,6 +1038,6 @@ TODO-09保存这些RNG/版本、未提交base/rescue阶段和档案引用；恢�
 - 当前产物为本计划、实施日志及TODO-00预检记录；业务代码、测试脚本、checkpoint和新入口均未创建。15个大TODO均未通过验收，不要把代码阅读、CUDA设备可用性或文档检查勾成实现通过。
 - 实施前两仓库HEAD为a4f930c/92997e2，工作区唯一未跟踪文件为本计划；已以commit `0d4999d` 保存原始计划。未发现适用的AGENTS.md。模型路径存在，两个任务train/test parquet均读取为16/128行，与每epoch约一个16任务batch的规划一致；仍需TODO-01确认实际dataloader配置。
 - 宿主机GPU资源已核对为8张A100 80GB，驱动570.195.03。默认conda Python被用户目录PyTorch 2.14.0覆盖而无法初始化CUDA；`PYTHONNOUSERSITE=1` 下verl环境PyTorch 2.6.0/cu124与verl_newer_vllm环境PyTorch 2.8.0/cu128均报告CUDA可用、8设备。以上仅为宿主机诊断，未改包或驱动，不作为容器环境的测试结论。
-- 用户已要求开始实现并允许本机8卡调试，随后指定ALFWorld使用 `verl_zhangkaiqi2024_alfworld`、WebShop使用 `verl_zhangkaiqi2024_webshop`，均在本机。P2O-ENV-001的环境选择已明确；下一步在对应容器内核对依赖、挂载和GPU可见性，然后继续TODO-00，无需重新询问容器选择。本轮仅补充文档；容器内尚未执行预检或业务测试。
+- 用户已要求开始实现并允许本机8卡调试，随后指定ALFWorld使用 `verl_zhangkaiqi2024_alfworld`、WebShop使用 `verl_zhangkaiqi2024_webshop`，均在本机。P2O-ENV-001的环境选择已明确，无需重新询问。两个容器运行中、CUDA可见8卡，挂载访问失败；下一步等待P2O-ENV-002处理选择，再继续TODO-00。临时复制源码到容器 `/tmp` 测试只是待确认提案，不得标为已经实施。
 - 参考P2O目录只读，所有实现放AGENT_ROOT；已有未提交改动属于用户/其他协作者，不能覆盖。本文作为唯一入口原位维护；新增日志文档后必须在本文链接，避免下一次接手遗漏。
 - TODO-00交付类型/API、最小两环境输入输出样例、序列化与错误合同验证，以及需用户确认的问题清单；完成后汇报并停止，不顺手进入TODO-01。

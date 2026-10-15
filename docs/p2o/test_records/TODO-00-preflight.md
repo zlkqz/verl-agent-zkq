@@ -102,3 +102,37 @@ PYTHONNOUSERSITE=1 /ceph_home/zhangkaiqi2024/miniconda3/envs/verl/bin/python ...
 未执行pytest、真实环境reset/step、模型加载、GPU计算或训练；TODO-00的所有实现与验收工作仍待继续。
 
 记录收尾检查通过：`git diff --check`；三份Markdown的相对文件链接、代码围栏配对及行尾空白检查；15个TODO保持未勾选且顺序完整。这些文档检查不计入TODO-00合同验收。
+
+## 2026-10-15 12:50起：指定容器实测
+
+Docker daemon与宿主机均为 `CIP-GPUSERVER-144`；两个容器均为running，默认用户root，bind mount配置为 `/ceph_home:/ceph_home`、`/141nfs:/141nfs`，均RW=true。
+
+| 项目 | ALFWorld容器 | WebShop容器 |
+| --- | --- | --- |
+| 容器 | verl_zhangkaiqi2024_alfworld | verl_zhangkaiqi2024_webshop |
+| 镜像 | verlai/verl:vllm011.latest | whatcanyousee/verl:ngc-cu124-vllm0.8.5-sglang0.4.6-mcore0.12.0-te2.3 |
+| Python | /usr/bin/python3，3.12.11 | /usr/bin/python3，3.10.12 |
+| torch | 2.8.0+cu128 | 2.6.0 |
+| CUDA runtime / available / count | 12.8 / True / 8 | 12.4 / True / 8 |
+| ray | 2.49.2 | 2.46.0 |
+| vllm | 0.11.0 | 0.8.5.post1 |
+| transformers | 4.57.1 | 4.51.1 |
+| tensordict | 0.10.0 | 0.8.3 |
+| pytest | 未安装 | 8.1.1 |
+| gym / gymnasium | 未安装 / 0.29.1 | 0.24.0 / 未安装 |
+| textworld / alfworld | 1.7.0 / 0.4.2 | 未安装 / 未安装 |
+| pyarrow | 22.0.0 | 20.0.0 |
+
+metadata版本读取不代表以上各包均已成功import；只import了torch做CUDA设备发现，未执行GPU计算或加载模型。
+
+访问失败复现（将容器名分别取上表两值）：
+
+```bash
+docker inspect --format '{{json .Mounts}}' CONTAINER
+docker exec -w /tmp CONTAINER ls -ld /ceph_home
+docker exec --user 1083:1083 -w /tmp CONTAINER sh -c 'cd /ceph_home/zhangkaiqi2024/verl-agent && pwd'
+```
+
+两容器root的 `ls` 均返回 `Permission denied`，UID 1083的 `cd` 也被拒绝。直接 `docker exec -w /ceph_home/zhangkaiqi2024/verl-agent` 的OCI chdir同样失败。宿主机 `ls -ld` 显示 `/ceph_home` 为777、用户目录与仓库为775，UID/GID为1083；仅这些信息不足以确认底层拒绝原因。
+
+依赖/CUDA检查使用 `docker exec -i -w /tmp CONTAINER python3 -u -` 输入本记录中的metadata/torch诊断脚本，不访问不可读挂载。CUDA检查两命令exit code均为0。未改权限、重建容器或实施 `/tmp` 源码暂存提案；问题P2O-ENV-002待用户决定。
