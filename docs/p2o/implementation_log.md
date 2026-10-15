@@ -2,7 +2,7 @@
 
 计划入口：[p2o_agent_implementation_plan.md](../p2o_agent_implementation_plan.md)。
 
-最新状态：TODO-00已实现并通过两容器验收；旧挂载问题已按用户授权通过重建和初始化解除。当前等待用户反馈后进入TODO-01。完整记录见[TODO-00.md](test_records/TODO-00.md)，以下保留定位及决策历史。
+最新状态：TODO-00已实现并通过两容器验收；旧挂载问题已按用户授权通过重建和初始化解除。当前等待用户反馈后进入TODO-01。先读[TODO-00实现说明](modules/TODO-00.md)，复现证据见[验收记录](test_records/TODO-00.md)，环境见[环境文档](environment.md)。主计划已精简为导航，以下保留定位及决策历史。
 
 ## 2026-10-15：TODO-00预检停点
 
@@ -71,3 +71,17 @@
 最终测试：初始化完成后，两容器各16项unittest均通过；ALFWorld为0.059s、WebShop为0.071s（测试体耗时）。两容器导出的JSON样例逐字节一致。源码指纹：contracts.py为 `f4f3d6c9f3130335d6bb1f19b59b183d4ba163a6f7993d5ef33c91c21c22209f`，base.py为 `08caba7c738df571a062332a1a57793b2f0cee426c70f95f86e16ea325d4bbce`，test_contracts.py为 `d4cf639940fa97bb411190fec856d669b2fa2de06abddca1e264ff09c94b8ab0`。完整命令、依赖、资源、输出和原始日志位置见[验收记录](test_records/TODO-00.md)。
 
 计划正文已更新为当前接口与已验收状态，TODO-00勾选。原入口/trainer/环境/collector/reward/actor及初始化脚本未改。保留待对应模块决定的随机化与退化模板采样边界，不先行实现。当前按逐大TODO停点要求暂停；下一步为TODO-01，等待用户反馈再开始。
+
+## 2026-10-15：补充TODO-00说明并拆分文档（本轮仅文档）
+
+用户要求每次停点不仅写Markdown，还要在对话中解释当前进度、做了什么、核心代码路径与逻辑、测试结果及问题；同时拆分过长的主计划。本轮没有进入TODO-01，没有修改业务代码、执行新环境操作或重新运行合同测试。
+
+- 主计划从1049行精简为52行，只维护当前状态、导航、约束与执行纪律。
+- 原§0/§1–4/§5–6/§7–8/§9–10/§11–14分别移至 `environment.md`、`method.md`、`interfaces_and_search.md`、`runtime_and_recovery.md`、`todo_list.md`、`decisions.md`；保留原编号与全部后续TODO验收门槛，补显式锚点和导航。修正少量“尚无模块/未做GPU计算”等过时状态文字。
+- 新增 `modules/TODO-00.md`：按任务/实例→subset请求→轨迹结果→token评分对齐→历史证据→序列化说明核心代码；区分可执行校验、Protocol声明、模拟测试与后续实机工作。
+- 环境恢复命令/镜像/版本从TODO-00验收页移至环境文档，验收页保留测试命令、结果、样例与证据链接，减少重复。
+- 将“Markdown与对话同时汇报”的固定内容写入主入口、§8.4记录规范与§12停点模板；后续模块分别提供实现说明及验收记录。
+
+检查结果：11份Markdown的本地链接、显式锚点和代码围栏通过；原64个编号标题均保留，15项TODO仅00勾选，后续验收条目完整；`git diff --check`通过。TODO-00测试结果仍引用实现提交 `7c297e8` 时两容器各16项通过的记录；本轮没有新增代码测试结果。用户已有 `my_scripts/run_webshop.sh` 注释修改保留且不纳入文档提交。
+
+当前仍在TODO-00完成停点，待本轮向用户解释实现与证据后，等待反馈再开始TODO-01。

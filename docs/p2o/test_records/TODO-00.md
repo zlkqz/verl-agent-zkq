@@ -1,5 +1,7 @@
 # TODO-00：公共合同与验收样例
 
+先读[TODO-00实现说明](../modules/TODO-00.md)了解核心路径与逻辑；本页保留验收命令和证据。
+
 日期：2026-10-15；状态：实现与本项验收通过，等待用户反馈后再进入TODO-01。
 
 ## 范围与产物
@@ -61,56 +63,15 @@ docker exec -w /ceph_home/zhangkaiqi2024/verl-agent verl_zhangkaiqi2024_alfworld
 
 同一导出命令在WebShop容器执行，输出与已保存JSON逐字节一致（cmp通过）。样例指纹：`fdf491997153698f1d8eed8d5f982d954cd8bff98c404d3cd46f1d5b1c15f9fa`。
 
-## 环境恢复证据
+## 环境证据入口
 
-用户授权后已删除两个仅运行sleep的旧容器，复用 `/ceph_home/zhangkaiqi2024/start_docker.sh` 的docker run参数，分别设置任务容器名和镜像：
-
-```bash
-docker run -d --runtime=nvidia --gpus all --net=host --shm-size=100g --cap-add=SYS_ADMIN \
-  -v /ceph_home/:/ceph_home -v /141nfs/:/141nfs/ \
-  --name verl_zhangkaiqi2024_alfworld --entrypoint /bin/bash \
-  verlai/verl:vllm011.latest -c 'sleep infinity'
-docker run -d --runtime=nvidia --gpus all --net=host --shm-size=100g --cap-add=SYS_ADMIN \
-  -v /ceph_home/:/ceph_home -v /141nfs/:/141nfs/ \
-  --name verl_zhangkaiqi2024_webshop --entrypoint /bin/bash \
-  whatcanyousee/verl:ngc-cu124-vllm0.8.5-sglang0.4.6-mcore0.12.0-te2.3 -c 'sleep infinity'
-```
-
-新容器ID分别为 `378227a4f4fd`、`2c9b47f1ca56`。镜像指纹分别为 `bb140137cf42cdb18990695fed2ec53cd5fdf69dfaad2ce2e85328031a8c8c6f`、`e71ed32d35f6c310db7709e303b5954eb05f5cbdd7cf7073ecf74de1d44322d1`。重建后仓库、指定Qwen3-8B config及数据可读，P2O-ENV-002解除。旧容器失效挂载的底层原因未定，不以重建成功推断原因。
-
-初始化成功命令：
-
-```bash
-docker exec -w /ceph_home/zhangkaiqi2024/verl-agent verl_zhangkaiqi2024_alfworld \
-  bash -e my_scripts/init_alfworld.sh
-docker exec -e PIP_CONFIG_FILE=/dev/null -e PIP_EXTRA_INDEX_URL= \
-  -w /ceph_home/zhangkaiqi2024/verl-agent verl_zhangkaiqi2024_webshop \
-  bash -e my_scripts/init_webshop.sh
-```
-
-两个最终命令exit code均为0。WebShop前两次安装在镜像附加源 `pypi.ngc.nvidia.com` 反复TLS失败；终止了本次任务的对应pip进程后，使用上述临时环境变量忽略pip配置中的附加源重跑。脚本内原版本约束、主镜像源和代理配置保持原样，未改初始化脚本。WebShop安装JDK后javac为11.0.32.1，脚本末尾的spaCy/训练入口/WebAgentTextEnv导入及train=16/test=128检查通过。
-
-| 项目 | ALFWorld容器 | WebShop容器 |
-| --- | --- | --- |
-| torch / CUDA | 2.8.0+cu128 / 12.8 | 2.6.0 / 12.4 |
-| ray / vllm | 2.49.2 / 0.11.0 | 2.46.0 / 0.8.5.post1 |
-| transformers | 4.57.1 | 4.51.1 |
-| 任务依赖 | gymnasium 0.29.1、stable-baselines3 2.6.0、alfworld 0.4.2、textworld 1.7.0 | gym 0.24.0、Flask 2.1.2、Werkzeug 2.1.0、pyserini 0.17.0、faiss-cpu 1.7.4 |
-| 其他核对 | tensordict 0.10.0 | spacy 3.7.5、en-core-web-sm 3.7.1、tensordict 0.8.3、datasets 4.0.0、wandb 0.22.3 |
-| 挂载/导入 | 实际仓库路径、模型config、ALF数据及训练入口/AlfworldWorker导入通过 | 实际仓库路径、模型config、WebShop数据/索引目录及训练入口/WebAgentTextEnv/spaCy导入通过 |
-| GPU基础运算 | GPU 0–7逐卡 `arange(4).square().sum()==14` 通过 | 同左 |
-
-GPU运算是环境烟雾检查，未加载模型、未做FSDP/vLLM生成或训练update。WS索引路径与相关依赖导入通过不等于真实检索episode通过；真实环境行为仍按TODO-02验收。
-
-原始日志位于本机 `/tmp/p2o-todo00-20261015/`：`init_alfworld.log`、`init_webshop_final.log`、`environment_alfworld.log`、`environment_webshop.log`、`contracts_alfworld.log`、`contracts_webshop.log`。前两次中断日志为 `init_webshop.log`、`init_webshop_retry.log`；临时日志可能被系统清理，本记录保存了命令、版本与关键结果。
-
-收尾检查：`git diff --check`通过；所有文档相对链接、代码围栏、已记录源码hash和样例outcome核对通过；计划仅TODO-00勾选，剩余14项未勾选。原入口/trainer、环境/collector/reward/actor/core_algos和两个init脚本的git diff为空。GPU测试进程退出后8卡均恢复占用10 MiB、利用率0%，两个任务容器保持running。
+两容器重建/初始化命令、镜像与容器ID、依赖版本、8卡基础运算及pip源问题的处理统一见[环境恢复证据](../environment.md#recovery-evidence)。历史预检见[TODO-00-preflight.md](TODO-00-preflight.md)。
 
 ## 保留问题与停点
 
 - TODO-02再验证真实任务目录版本、ALFWorld可产生的初始化多样性、WebShop价格/goal合法变体及split映射；本项未授权或实现新的随机化字段。
 - TODO-08/11前确认全零dev分数、空selected、成功子集全零等退化采样行为；当前仅允许表示这些数据，不决定采样算法。
-- dev比例25%、选择器与搜索预算等仍按计划§14.3在对应模块讨论。本项未改变已确认的身份、success阈值或两策略。
+- dev比例25%、选择器与搜索预算等仍按[待决事项 §14.3](../decisions.md#section-14-3)在对应模块讨论。本项未改变已确认的身份、success阈值或两策略。
 - 模型权重/tokenizer/config fingerprint实际核验、真实rollout logprob一致性、资源切换与checkpoint I/O均未验证，本项没有用mock替代这些后续验收。
 - 原入口、trainer、环境、collector、reward、actor与baseline运行逻辑未修改。`my_scripts/run_webshop.sh`有用户预先存在的一处镜像名注释修改，本次保留且不纳入提交。
 
