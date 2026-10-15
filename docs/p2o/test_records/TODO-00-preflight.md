@@ -4,6 +4,10 @@
 
 本记录只证明路径、版本、设备发现及只读代码核对，不代表合同模块、真实环境、模型生成或GPU计算测试通过。问题P2O-ENV-001见[实施日志](../implementation_log.md)。
 
+## 用户补充的实际运行环境
+
+用户于2026-10-15明确：ALFWorld使用本机容器 `verl_zhangkaiqi2024_alfworld`，WebShop使用本机容器 `verl_zhangkaiqi2024_webshop`。后续各任务在对应容器内预检和调试；以下Python/CUDA诊断均来自宿主机，保留为历史证据，不代表容器内的依赖或CUDA状态。容器内仓库/模型/数据路径映射、实际Python和依赖版本、GPU可见性尚未核验。
+
 ## 仓库与文件
 
 运行 `git status --short`、两仓库的 `git rev-parse --short HEAD`，起始结果：
@@ -80,7 +84,7 @@ print(torch.cuda.is_available(), torch.cuda.device_count())
 CUDA initialization: The NVIDIA driver on your system is too old (found version 12080).
 ```
 
-诊断仅临时设置环境变量，不修改包、shell配置或原baseline脚本。推荐候选执行命令（待用户确认）：
+诊断仅临时设置环境变量，不修改包、shell配置或原baseline脚本。当时的宿主机候选执行命令如下，现已由用户指定的两任务容器替代，不作为后续默认执行命令：
 
 ```bash
 PYTHONNOUSERSITE=1 /ceph_home/zhangkaiqi2024/miniconda3/envs/verl/bin/python ...
