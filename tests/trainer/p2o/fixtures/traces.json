@@ -1,0 +1,23 @@
+[
+  {
+    "fixture_kind": "synthetic, normalized from the native ALFWorld worker schema",
+    "key": {"env": "alfworld", "split": "train", "task_catalog_version": "fixture-json-2.1.1", "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"},
+    "selector": {"gamefile": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"},
+    "initial_observation": "Your task is to: put two books in dresser.",
+    "available_actions": ["put book 2 in/on dresser 1"],
+    "transitions": [
+      {"action": "put book 2 in/on dresser 1", "observation": "You put the book in the dresser.", "available_actions": [], "raw_reward": 10.0, "done": true, "truncated": false, "success": true, "task_score": null, "valid": true, "termination_reason": "success", "terminal_observation": "You put the book in the dresser.", "terminal_info": {"won": true}, "action_diagnostics": {"is_action_valid": true}}
+    ]
+  },
+  {
+    "fixture_kind": "synthetic, normalized from the native WebShop worker schema",
+    "key": {"env": "webshop", "split": "train", "task_catalog_version": "fixture-canonical-goals-v1", "task_id": "500"},
+    "selector": {"goal_index": 500},
+    "initial_observation": "Find a blue shirt in size small.",
+    "available_actions": ["search[blue shirt]"],
+    "transitions": [
+      {"action": "search[blue shirt]", "observation": "Search results.", "available_actions": ["click[buy now]"], "raw_reward": 0.0, "done": false, "truncated": false, "success": false, "task_score": 0.0, "valid": true, "termination_reason": null, "terminal_observation": null, "terminal_info": {}, "action_diagnostics": {"is_action_valid": true}},
+      {"action": "click[buy now]", "observation": "Purchased a shirt with a wrong size.", "available_actions": [], "raw_reward": 0.0, "done": true, "truncated": false, "success": false, "task_score": 0.4, "valid": true, "termination_reason": "environment_done", "terminal_observation": "Purchased a shirt with a wrong size.", "terminal_info": {"won": false, "task_score": 0.4}, "action_diagnostics": {"is_action_valid": true}}
+    ]
+  }
+]

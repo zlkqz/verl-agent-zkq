@@ -1,0 +1,612 @@
+{
+  "schema_version": 1,
+  "real_environment_execution": false,
+  "note": "Synthetic contract fixtures, not environment/model/GEPA results.",
+  "cases": [
+    {
+      "fixture_kind": "synthetic, normalized from the native ALFWorld worker schema",
+      "sample_key": "p2o:v1:[\"alfworld\",\"train\",\"fixture-json-2.1.1\",\"pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl\"]",
+      "recipe": {
+        "schema_version": 1,
+        "record_type": "TaskRecipe",
+        "payload": {
+          "sample_key": {
+            "schema_version": 1,
+            "record_type": "SampleKey",
+            "payload": {
+              "env": "alfworld",
+              "split": "train",
+              "task_catalog_version": "fixture-json-2.1.1",
+              "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+            }
+          },
+          "task_selector": {
+            "gamefile": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+          },
+          "data_version": "fixture-data-v1",
+          "source_version": "fixture-code-v1",
+          "env_config": {},
+          "allowed_variations": [],
+          "initial_observation": "Your task is to: put two books in dresser.",
+          "original_instance_summary": {}
+        }
+      },
+      "instance": {
+        "schema_version": 1,
+        "record_type": "EvalInstance",
+        "payload": {
+          "sample_key": {
+            "schema_version": 1,
+            "record_type": "SampleKey",
+            "payload": {
+              "env": "alfworld",
+              "split": "train",
+              "task_catalog_version": "fixture-json-2.1.1",
+              "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+            }
+          },
+          "recipe_id": "recipe:be6c5391fca4bdb089bd3cf28ca402b6dd975c01c0944365da57c3b2c00fa12a",
+          "instance_id": "alfworld-instance-0",
+          "initialization": {
+            "fixture_seed": 0
+          },
+          "initial_observation": "Your task is to: put two books in dresser.",
+          "world_artifact": null,
+          "captured_turn": 0
+        }
+      },
+      "trace": {
+        "schema_version": 1,
+        "record_type": "EpisodeTrace",
+        "payload": {
+          "identity": {
+            "schema_version": 1,
+            "record_type": "EpisodeIdentity",
+            "payload": {
+              "sample_key": {
+                "schema_version": 1,
+                "record_type": "SampleKey",
+                "payload": {
+                  "env": "alfworld",
+                  "split": "train",
+                  "task_catalog_version": "fixture-json-2.1.1",
+                  "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+                }
+              },
+              "instance_id": "alfworld-instance-0",
+              "group_uid": "g0",
+              "traj_uid": "t0",
+              "episode_id": "episode-t0",
+              "policy_version": "policy-v1",
+              "phase": "base",
+              "template": null,
+              "parent_group_uid": null
+            }
+          },
+          "initial_observation": "Your task is to: put two books in dresser.",
+          "transitions": [
+            {
+              "schema_version": 1,
+              "record_type": "Transition",
+              "payload": {
+                "identity": {
+                  "schema_version": 1,
+                  "record_type": "TurnIdentity",
+                  "payload": {
+                    "episode": {
+                      "schema_version": 1,
+                      "record_type": "EpisodeIdentity",
+                      "payload": {
+                        "sample_key": {
+                          "schema_version": 1,
+                          "record_type": "SampleKey",
+                          "payload": {
+                            "env": "alfworld",
+                            "split": "train",
+                            "task_catalog_version": "fixture-json-2.1.1",
+                            "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+                          }
+                        },
+                        "instance_id": "alfworld-instance-0",
+                        "group_uid": "g0",
+                        "traj_uid": "t0",
+                        "episode_id": "episode-t0",
+                        "policy_version": "policy-v1",
+                        "phase": "base",
+                        "template": null,
+                        "parent_group_uid": null
+                      }
+                    },
+                    "turn_index": 0,
+                    "slot": 3,
+                    "request_id": "step-0",
+                    "attempt_id": "attempt-0",
+                    "is_padding": false
+                  }
+                },
+                "observation": "You put the book in the dresser.",
+                "available_actions": [],
+                "executed_action": "put book 2 in/on dresser 1",
+                "raw_reward": 10.0,
+                "done": true,
+                "truncated": false,
+                "success": true,
+                "task_score": null,
+                "valid": true,
+                "termination_reason": "success",
+                "terminal_observation": "You put the book in the dresser.",
+                "terminal_info": {
+                  "won": true
+                },
+                "action_diagnostics": {
+                  "is_action_valid": true
+                },
+                "invalid_action_penalty": 0.0
+              }
+            }
+          ]
+        }
+      },
+      "outcome": {
+        "schema_version": 1,
+        "record_type": "EpisodeOutcome",
+        "payload": {
+          "identity": {
+            "schema_version": 1,
+            "record_type": "EpisodeIdentity",
+            "payload": {
+              "sample_key": {
+                "schema_version": 1,
+                "record_type": "SampleKey",
+                "payload": {
+                  "env": "alfworld",
+                  "split": "train",
+                  "task_catalog_version": "fixture-json-2.1.1",
+                  "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+                }
+              },
+              "instance_id": "alfworld-instance-0",
+              "group_uid": "g0",
+              "traj_uid": "t0",
+              "episode_id": "episode-t0",
+              "policy_version": "policy-v1",
+              "phase": "base",
+              "template": null,
+              "parent_group_uid": null
+            }
+          },
+          "success": true,
+          "task_score": null,
+          "task_return": 10.0,
+          "invalid_action_penalty": 0.0,
+          "termination_reason": "success",
+          "valid": true,
+          "steps": 1
+        }
+      }
+    },
+    {
+      "fixture_kind": "synthetic, normalized from the native WebShop worker schema",
+      "sample_key": "p2o:v1:[\"webshop\",\"train\",\"fixture-canonical-goals-v1\",\"500\"]",
+      "recipe": {
+        "schema_version": 1,
+        "record_type": "TaskRecipe",
+        "payload": {
+          "sample_key": {
+            "schema_version": 1,
+            "record_type": "SampleKey",
+            "payload": {
+              "env": "webshop",
+              "split": "train",
+              "task_catalog_version": "fixture-canonical-goals-v1",
+              "task_id": "500"
+            }
+          },
+          "task_selector": {
+            "goal_index": 500
+          },
+          "data_version": "fixture-data-v1",
+          "source_version": "fixture-code-v1",
+          "env_config": {},
+          "allowed_variations": [],
+          "initial_observation": "Find a blue shirt in size small.",
+          "original_instance_summary": {}
+        }
+      },
+      "instance": {
+        "schema_version": 1,
+        "record_type": "EvalInstance",
+        "payload": {
+          "sample_key": {
+            "schema_version": 1,
+            "record_type": "SampleKey",
+            "payload": {
+              "env": "webshop",
+              "split": "train",
+              "task_catalog_version": "fixture-canonical-goals-v1",
+              "task_id": "500"
+            }
+          },
+          "recipe_id": "recipe:d1f5d2c303e9b94b8a61a975ef768484a165b75907b13841e494e4b904eb51d7",
+          "instance_id": "webshop-instance-0",
+          "initialization": {
+            "fixture_seed": 0
+          },
+          "initial_observation": "Find a blue shirt in size small.",
+          "world_artifact": null,
+          "captured_turn": 0
+        }
+      },
+      "trace": {
+        "schema_version": 1,
+        "record_type": "EpisodeTrace",
+        "payload": {
+          "identity": {
+            "schema_version": 1,
+            "record_type": "EpisodeIdentity",
+            "payload": {
+              "sample_key": {
+                "schema_version": 1,
+                "record_type": "SampleKey",
+                "payload": {
+                  "env": "webshop",
+                  "split": "train",
+                  "task_catalog_version": "fixture-canonical-goals-v1",
+                  "task_id": "500"
+                }
+              },
+              "instance_id": "webshop-instance-0",
+              "group_uid": "g0",
+              "traj_uid": "t0",
+              "episode_id": "episode-t0",
+              "policy_version": "policy-v1",
+              "phase": "base",
+              "template": null,
+              "parent_group_uid": null
+            }
+          },
+          "initial_observation": "Find a blue shirt in size small.",
+          "transitions": [
+            {
+              "schema_version": 1,
+              "record_type": "Transition",
+              "payload": {
+                "identity": {
+                  "schema_version": 1,
+                  "record_type": "TurnIdentity",
+                  "payload": {
+                    "episode": {
+                      "schema_version": 1,
+                      "record_type": "EpisodeIdentity",
+                      "payload": {
+                        "sample_key": {
+                          "schema_version": 1,
+                          "record_type": "SampleKey",
+                          "payload": {
+                            "env": "webshop",
+                            "split": "train",
+                            "task_catalog_version": "fixture-canonical-goals-v1",
+                            "task_id": "500"
+                          }
+                        },
+                        "instance_id": "webshop-instance-0",
+                        "group_uid": "g0",
+                        "traj_uid": "t0",
+                        "episode_id": "episode-t0",
+                        "policy_version": "policy-v1",
+                        "phase": "base",
+                        "template": null,
+                        "parent_group_uid": null
+                      }
+                    },
+                    "turn_index": 0,
+                    "slot": 3,
+                    "request_id": "step-0",
+                    "attempt_id": "attempt-0",
+                    "is_padding": false
+                  }
+                },
+                "observation": "Search results.",
+                "available_actions": [
+                  "click[buy now]"
+                ],
+                "executed_action": "search[blue shirt]",
+                "raw_reward": 0.0,
+                "done": false,
+                "truncated": false,
+                "success": false,
+                "task_score": 0.0,
+                "valid": true,
+                "termination_reason": null,
+                "terminal_observation": null,
+                "terminal_info": {},
+                "action_diagnostics": {
+                  "is_action_valid": true
+                },
+                "invalid_action_penalty": 0.0
+              }
+            },
+            {
+              "schema_version": 1,
+              "record_type": "Transition",
+              "payload": {
+                "identity": {
+                  "schema_version": 1,
+                  "record_type": "TurnIdentity",
+                  "payload": {
+                    "episode": {
+                      "schema_version": 1,
+                      "record_type": "EpisodeIdentity",
+                      "payload": {
+                        "sample_key": {
+                          "schema_version": 1,
+                          "record_type": "SampleKey",
+                          "payload": {
+                            "env": "webshop",
+                            "split": "train",
+                            "task_catalog_version": "fixture-canonical-goals-v1",
+                            "task_id": "500"
+                          }
+                        },
+                        "instance_id": "webshop-instance-0",
+                        "group_uid": "g0",
+                        "traj_uid": "t0",
+                        "episode_id": "episode-t0",
+                        "policy_version": "policy-v1",
+                        "phase": "base",
+                        "template": null,
+                        "parent_group_uid": null
+                      }
+                    },
+                    "turn_index": 1,
+                    "slot": 3,
+                    "request_id": "step-1",
+                    "attempt_id": "attempt-0",
+                    "is_padding": false
+                  }
+                },
+                "observation": "Purchased a shirt with a wrong size.",
+                "available_actions": [],
+                "executed_action": "click[buy now]",
+                "raw_reward": 0.0,
+                "done": true,
+                "truncated": false,
+                "success": false,
+                "task_score": 0.4,
+                "valid": true,
+                "termination_reason": "environment_done",
+                "terminal_observation": "Purchased a shirt with a wrong size.",
+                "terminal_info": {
+                  "won": false,
+                  "task_score": 0.4
+                },
+                "action_diagnostics": {
+                  "is_action_valid": true
+                },
+                "invalid_action_penalty": 0.0
+              }
+            }
+          ]
+        }
+      },
+      "outcome": {
+        "schema_version": 1,
+        "record_type": "EpisodeOutcome",
+        "payload": {
+          "identity": {
+            "schema_version": 1,
+            "record_type": "EpisodeIdentity",
+            "payload": {
+              "sample_key": {
+                "schema_version": 1,
+                "record_type": "SampleKey",
+                "payload": {
+                  "env": "webshop",
+                  "split": "train",
+                  "task_catalog_version": "fixture-canonical-goals-v1",
+                  "task_id": "500"
+                }
+              },
+              "instance_id": "webshop-instance-0",
+              "group_uid": "g0",
+              "traj_uid": "t0",
+              "episode_id": "episode-t0",
+              "policy_version": "policy-v1",
+              "phase": "base",
+              "template": null,
+              "parent_group_uid": null
+            }
+          },
+          "success": false,
+          "task_score": 0.4,
+          "task_return": 0.0,
+          "invalid_action_penalty": 0.0,
+          "termination_reason": "environment_done",
+          "valid": true,
+          "steps": 2
+        }
+      }
+    }
+  ],
+  "raw_response_example": {
+    "schema_version": 1,
+    "record_type": "GeneratedResponse",
+    "payload": {
+      "row_id": "row-0",
+      "identity": {
+        "schema_version": 1,
+        "record_type": "TurnIdentity",
+        "payload": {
+          "episode": {
+            "schema_version": 1,
+            "record_type": "EpisodeIdentity",
+            "payload": {
+              "sample_key": {
+                "schema_version": 1,
+                "record_type": "SampleKey",
+                "payload": {
+                  "env": "alfworld",
+                  "split": "train",
+                  "task_catalog_version": "fixture-json-2.1.1",
+                  "task_id": "pick_two_obj_and_place-Book-None-Dresser-317/trial_T20190908_144510_731798/game.tw-pddl"
+                }
+              },
+              "instance_id": "alfworld-instance-0",
+              "group_uid": "g0",
+              "traj_uid": "t0",
+              "episode_id": "episode-t0",
+              "policy_version": "policy-v1",
+              "phase": "base",
+              "template": {
+                "schema_version": 1,
+                "record_type": "TemplateBinding",
+                "payload": {
+                  "template_id": "handwritten",
+                  "text": "Check current actions.",
+                  "source_cycle": null
+                }
+              },
+              "parent_group_uid": null
+            }
+          },
+          "turn_index": 0,
+          "slot": 0,
+          "request_id": "request-0",
+          "attempt_id": "attempt-0",
+          "is_padding": false
+        }
+      },
+      "contexts": {
+        "schema_version": 1,
+        "record_type": "ContextPair",
+        "payload": {
+          "base": {
+            "schema_version": 1,
+            "record_type": "PromptSnapshot",
+            "payload": {
+              "messages": [
+                {
+                  "schema_version": 1,
+                  "record_type": "ChatMessage",
+                  "payload": {
+                    "role": "user",
+                    "content": "task"
+                  }
+                }
+              ],
+              "input_ids": [
+                0,
+                1,
+                2
+              ],
+              "attention_mask": [
+                0,
+                1,
+                1
+              ],
+              "position_ids": [
+                0,
+                0,
+                1
+              ],
+              "tokenizer_fingerprint": "tokenizer-v1"
+            }
+          },
+          "augmented": {
+            "schema_version": 1,
+            "record_type": "PromptSnapshot",
+            "payload": {
+              "messages": [
+                {
+                  "schema_version": 1,
+                  "record_type": "ChatMessage",
+                  "payload": {
+                    "role": "user",
+                    "content": "task"
+                  }
+                },
+                {
+                  "schema_version": 1,
+                  "record_type": "ChatMessage",
+                  "payload": {
+                    "role": "user",
+                    "content": "Check current actions."
+                  }
+                }
+              ],
+              "input_ids": [
+                1,
+                2,
+                3
+              ],
+              "attention_mask": [
+                1,
+                1,
+                1
+              ],
+              "position_ids": [
+                0,
+                1,
+                2
+              ],
+              "tokenizer_fingerprint": "tokenizer-v1"
+            }
+          },
+          "template": {
+            "schema_version": 1,
+            "record_type": "TemplateBinding",
+            "payload": {
+              "template_id": "handwritten",
+              "text": "Check current actions.",
+              "source_cycle": null
+            }
+          }
+        }
+      },
+      "response_ids": [
+        10,
+        11,
+        0,
+        0
+      ],
+      "response_mask": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "augmented_log_probs": [
+        -0.1,
+        -0.2,
+        -0.3,
+        0.0
+      ],
+      "stop_reason": "eos",
+      "generation_policy_version": "policy-v1",
+      "decoding_fingerprint": "decoding-v1"
+    }
+  },
+  "base_score_example": {
+    "schema_version": 1,
+    "record_type": "TokenScores",
+    "payload": {
+      "row_id": "row-0",
+      "policy_version": "policy-v1",
+      "context": "base",
+      "prompt_hash": "7c068db74fcac514cc99ebc2658539ddc093870dd2067a8a16db2ee4b7437288",
+      "response_hash": "2ea291f5d48202a940cf1307d67ca2b63ca4132c4f59f8ace8b094ea030bff87",
+      "response_mask": [
+        1,
+        1,
+        1,
+        0
+      ],
+      "log_probs": [
+        -1.0,
+        -2.0,
+        -3.0,
+        0.0
+      ]
+    }
+  }
+}

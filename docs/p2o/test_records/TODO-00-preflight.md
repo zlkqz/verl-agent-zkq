@@ -2,11 +2,11 @@
 
 日期：2026-10-15，Asia/Harbin，约11:30–11:40。工作目录：`/ceph_home/zhangkaiqi2024/verl-agent`。
 
-本记录只证明路径、版本、设备发现及只读代码核对，不代表合同模块、真实环境、模型生成或GPU计算测试通过。问题P2O-ENV-001见[实施日志](../implementation_log.md)。
+本记录保留初始预检历史；当前环境恢复及TODO-00完成结果见[TODO-00.md](TODO-00.md)。以下旧失败不代表当前环境状态。问题P2O-ENV-001/002见[实施日志](../implementation_log.md)。
 
 ## 用户补充的实际运行环境
 
-用户于2026-10-15明确：ALFWorld使用本机容器 `verl_zhangkaiqi2024_alfworld`，WebShop使用本机容器 `verl_zhangkaiqi2024_webshop`。后续各任务在对应容器内预检和调试；以下Python/CUDA诊断均来自宿主机，保留为历史证据，不代表容器内的依赖或CUDA状态。容器内仓库/模型/数据路径映射、实际Python和依赖版本、GPU可见性尚未核验。
+用户于2026-10-15明确：ALFWorld使用本机容器 `verl_zhangkaiqi2024_alfworld`，WebShop使用本机容器 `verl_zhangkaiqi2024_webshop`。后续各任务在对应容器内预检和调试；本记录“Python与CUDA诊断”一节来自宿主机，不代表容器状态。容器实测及后续重建结果分别见本记录末节和[当前验收记录](TODO-00.md)。
 
 ## 仓库与文件
 
@@ -136,3 +136,5 @@ docker exec --user 1083:1083 -w /tmp CONTAINER sh -c 'cd /ceph_home/zhangkaiqi20
 两容器root的 `ls` 均返回 `Permission denied`，UID 1083的 `cd` 也被拒绝。直接 `docker exec -w /ceph_home/zhangkaiqi2024/verl-agent` 的OCI chdir同样失败。宿主机 `ls -ld` 显示 `/ceph_home` 为777、用户目录与仓库为775，UID/GID为1083；仅这些信息不足以确认底层拒绝原因。
 
 依赖/CUDA检查使用 `docker exec -i -w /tmp CONTAINER python3 -u -` 输入本记录中的metadata/torch诊断脚本，不访问不可读挂载。CUDA检查两命令exit code均为0。未改权限、重建容器或实施 `/tmp` 源码暂存提案；问题P2O-ENV-002待用户决定。
+
+后续用户已授权删除旧容器并按指定镜像/启动参数重建、分别执行init脚本，已完成且挂载恢复；本节的旧容器已删除。当前状态和完整重建/初始化/测试证据见[TODO-00验收记录](TODO-00.md)。

@@ -1,17 +1,17 @@
 # P2O 在 ALFWorld / WebShop 上的实现计划
 
-更新日期：2026-10-15。状态：用户已授权开始实现及使用本机8卡调试，已指定ALFWorld/WebShop各自的本机容器（§0.2.1）；容器内CUDA均可识别8卡，但访问挂载目录 `/ceph_home` 被拒绝，TODO-00停在P2O-ENV-002，等待用户选择临时测试路径或处理挂载。训练代码尚未修改，未启动训练。
+更新日期：2026-10-15。状态：两个任务容器已按用户授权重建并完成各自初始化，挂载恢复；TODO-00公共合同与验收样例已实现并通过两容器测试。当前暂停等待用户反馈，再进入TODO-01；未启动训练。
 
-本文是移交入口：接手 Agent 不应假定能看到之前的对话。实现与问题记录见 [implementation_log.md](p2o/implementation_log.md)，预检证据见 [TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)。下面分别标明用户已确定的要求、代码阅读事实、工程建议和待讨论事项。本文出现的拟新增业务模块、配置键、数据结构和测试均尚未实现。
+本文是移交入口：接手 Agent 不应假定能看到之前的对话。实现与问题记录见 [implementation_log.md](p2o/implementation_log.md)，初始预检历史见 [TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)，当前验收与环境恢复结果见 [TODO-00.md](p2o/test_records/TODO-00.md)，完整模拟输入输出见 [TODO-00-examples.json](p2o/test_records/TODO-00-examples.json)。已实现范围为公共合同、协议、样例及其验证；其余入口、配置、adapter、训练与搜索模块仍待实现。
 
 阅读基准：当前仓库 `a4f930c`；相邻 P2O 仓库 `92997e2`。论文采用用户提供的无版本 PDF 链接当前对应的 [arXiv v4](https://arxiv.org/pdf/2603.21877v4)，重点核对 §3、公式 4–6、附录 A–C。早期 v1 的表述不作为本次实现规范。
 
 
 ## 交接速览：继任者先读这一段
 
-这是**实施中的计划，不是已实现的P2O代码**。目前完成宿主机仓库/资源/依赖预检，以及两任务容器的状态、依赖metadata及CUDA设备发现检查；容器挂载访问检查失败，问题P2O-ENV-002待讨论。训练代码未改、模型/环境/GPU计算测试未运行。所有15个大TODO（00–10、11A、11B、12、13）均未通过验收；TODO-00尚未实现。文中的配置/API/新路径是待实现设计，不要直接当作已有命令运行。
+当前已完成**TODO-00公共合同与验收样例**，其余14个大TODO未执行。两个指定容器已重建并执行对应初始化脚本，挂载、关键依赖导入及逐卡基础CUDA运算通过；公共合同16项测试在Python 3.12/3.10两个容器中均通过，模拟样例导出逐字节一致。真实环境adapter/reset/step、模型加载/生成、GEPA/CRM及训练均未执行，不能把本项fixture验收当作后续实机验收。
 
-接手顺序：先读§0的用户要求与路径，再读§2/§4–8的算法和数据合同、§12/§14.3的待决事项及实现记录，最后执行§9。用户已明确启动实现，从**TODO-00公共接口与样例**开始；P2O-ENV-001的环境选择已由用户指定容器解决，下一步在对应容器内核对依赖、挂载及GPU可见性。不可先一口气复制/修改所有模块，不可直接启动正式训练。每个大TODO完成并通过验收后向用户汇报、停止，得到继续指示再进入下一项。
+接手顺序：先读§0的用户要求与路径，再读§2/§4–8的算法和数据合同、§12/§14.3的待决事项及最新验收记录，最后执行§9。P2O-ENV-001/002均已处理；当前在TODO-00完成停点，等待用户反馈后进入TODO-01。每个大TODO完成并通过验收后仍须汇报、停止，得到继续指示再进入下一项；不可直接启动正式训练。
 
 状态标记：**用户已确认**是必须遵守的决策；**源码事实**是只读分析、需在当前checkout核对；**建议/提案**不是用户承诺，遇到语义选择先讨论。本文正文代表当前方案，历史否定句只用于防止回退旧设计；以后用户的新决定优先，先同步文档再做实现。§14提供完整要求覆盖表、剩余边界和交接检查结果，继任者不需要前面对话。
 
@@ -63,7 +63,7 @@
 | 两个原 baseline 脚本内的旧 model_path | `/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/Qwen3-8B` | 当前不可见；新 P2O 脚本用上一行，不为此改旧脚本 |
 | 两脚本当前保存根目录 | `/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/saved_models/p2o-agent/` | 当前会话不存在；实际运行需检查挂载或配置新的路径 |
 
-`πinit` 的最终路径应取自实际启动训练时解析出的初始模型配置并固定 revision/fingerprint；不得因为上面脚本路径不可用而自动替换成别的模型。用户已经给出上表的实际模型，不再把模型位置作为待提问项；尚未加载模型或验证显存及训练容器依赖版本。
+`πinit` 的最终路径应取自实际启动训练时解析出的初始模型配置并固定 revision/fingerprint；不得因为上面脚本路径不可用而自动替换成别的模型。用户已经给出上表的实际模型，不再把模型位置作为待提问项；尚未加载模型；训练容器依赖版本和基础GPU运算已核对，模型运行显存留待后续测试。
 
 ### 0.2.1 本机任务容器（用户已确认）
 
@@ -71,12 +71,14 @@
 
 | 任务 | 容器名称 | 信息来源与核验状态 |
 | --- | --- | --- |
-| ALFWorld | `verl_zhangkaiqi2024_alfworld` | 用户指定；运行中，Python 3.12.11，PyTorch 2.8.0+cu128，vLLM 0.11.0，CUDA可见8卡；挂载访问失败 |
-| WebShop | `verl_zhangkaiqi2024_webshop` | 用户指定；运行中，Python 3.10.12，PyTorch 2.6.0/CUDA 12.4，vLLM 0.8.5.post1，CUDA可见8卡；挂载访问失败 |
+| ALFWorld | `verl_zhangkaiqi2024_alfworld` | 用户指定；运行中，Python 3.12.11，PyTorch 2.8.0+cu128，vLLM 0.11.0，初始化成功，挂载恢复，8卡基础运算通过 |
+| WebShop | `verl_zhangkaiqi2024_webshop` | 用户指定；运行中，Python 3.10.12，PyTorch 2.6.0/CUDA 12.4，vLLM 0.8.5.post1，初始化成功，挂载恢复，8卡基础运算通过 |
 
 后续两任务的依赖检查、环境reset/step、模型/GPU功能测试及有界update，应在各自容器中执行，并记录容器内实际Python路径、依赖版本、CUDA/GPU可见性和执行命令。先核对容器状态及仓库、模型、数据、输出目录的挂载映射；上表§0.2的路径为宿主机已知位置，容器内路径以实际挂载为准。代码修改继续保存在目标仓库，确认容器运行的是该工作区的当前代码。
 
-此前宿主机的user-site/PyTorch覆盖诊断仅作历史定位证据，不代表这两个容器存在同一问题。后续使用用户指定容器；不再将宿主机conda环境或 `PYTHONNOUSERSITE=1` 作为默认执行方案。已在容器 `/tmp` 下读取依赖metadata并确认CUDA可见8卡；未验证GPU计算或模型加载。两个容器均配置 `/ceph_home:/ceph_home` 读写绑定，但容器内root和UID 1083均无法访问 `/ceph_home`，返回 `Permission denied`。原因尚未确认，未修改权限或挂载、未重启容器。P2O-ENV-002提案为TODO-00将必要源码暂存容器 `/tmp` 测试，或先处理挂载；用户选择前不执行提案。证据见[预检记录](p2o/test_records/TODO-00-preflight.md)。
+此前宿主机的user-site/PyTorch覆盖诊断仅作历史证据，后续在用户指定容器中执行。用户授权后已删除旧容器，按 `/ceph_home/zhangkaiqi2024/start_docker.sh` 的GPU/网络/shm/挂载参数、各任务指定镜像和原任务容器名称重建；随后分别执行 `my_scripts/init_alfworld.sh` 和 `my_scripts/init_webshop.sh`，最终均exit code=0。WebShop安装时临时使用 `PIP_CONFIG_FILE=/dev/null PIP_EXTRA_INDEX_URL=` 排除镜像附加包源的TLS重试，脚本及版本约束未改。
+
+仓库与指定模型config、任务数据路径已在容器内核对可读；两容器中GPU 0–7逐卡基础CUDA运算、关键依赖/训练入口导入通过。真实环境episode、模型权重加载及vLLM/FSDP功能尚未验证。重建命令、镜像/容器ID、实际依赖版本、初始化与检查日志见[TODO-00验收记录](p2o/test_records/TODO-00.md)；旧失败证据保留在预检记录，不再作为当前阻塞。
 
 ### 0.3 数据和初始化入口
 
@@ -92,7 +94,7 @@
 | WebShop 当前小商品集 | `data/webshop/items_shuffle_1000.json`、`items_ins_v2_1000.json`；均存在 |
 | WebShop 搜索索引 | `data/webshop/search_engine/indexes`；存在。实际索引由 `num_products` 决定，不因 JSON 文件名含 1000 就假定使用 `indexes_1k` |
 | WebShop 程序内部数据入口 | `agent_system/environments/env_package/webshop/webshop/data` 和同级 `search_engine/indexes`，当前为存在的符号链接 |
-| 环境准备脚本 | `my_scripts/init_alfworld.sh`、`my_scripts/init_webshop.sh`；包含环境准备/数据生成等动作，只作定位依据，计划阶段不要执行 |
+| 环境准备脚本 | `my_scripts/init_alfworld.sh`、`my_scripts/init_webshop.sh`；用户已授权在对应重建容器内分别执行，结果记入预检记录 |
 | 当前公共训练配置 | `verl/trainer/config/ppo_trainer.yaml`，具体配置需再叠加脚本 Hydra override |
 
 当前默认 `env.webshop.use_small=True`、`human_goals=False`、`env.seed=0`。ALFWorld 默认 `eval_in_distribution`，配置文件是 `agent_system/environments/env_package/alfworld/configs/config_tw.yaml`，`domain_randomization=False`、`goal_desc_human_anns_prob=0.0`。这些是阅读时的默认值，不覆盖用户未来显式 override。
@@ -387,29 +389,32 @@ Math源码约2694–2772行：dev样本先找selected集合里覆盖它的候选
 
 ### 5.2 公共接口先行：主程序不识别具体环境
 
-先在 contracts 中固定输入、输出、异常与版本，再实现两套 adapter。建议以组合方式包装已有 manager，原 EnvironmentManagerBase 的旧方法保持兼容。
+TODO-00已落实输入、输出、异常与schema v1：[contracts.py](../verl/trainer/p2o/contracts.py) 与 [base.py](../agent_system/p2o/base.py)。以下为已实现的Protocol摘要；真实两任务adapter在TODO-02实现，采用组合方式包装已有manager，原EnvironmentManagerBase的旧方法保持兼容。
 
 ```python
-# 示意 API，均未实现。方法可按既有 async/Ray 风格实现，但语义统一。
 class P2OEnvAdapter:
     def capture_task(self, slot, reset_observation, reset_info) -> TaskRecipe: ...
-    def capture_instance(self, slot) -> EvalInstance: ...  # t=0捕获，仅在固定面板/救援/恢复需要时
-    def make_instances(self, recipes, seed_schedule, mode) -> list[EvalInstance]: ...
-    def reset_instances(self, instances, slots) -> ResetBatch: ...
-    def step(self, actions, active_slots) -> TransitionBatch: ...
+    def capture_instance(self, slot) -> EvalInstance: ...  # 仅首次action前
+    def make_instances(self, recipes, seed_schedule, mode, replay_instances=()) -> tuple[EvalInstance, ...]: ...
+    def reset_instances(self, requests: tuple[ResetRequest, ...]) -> ResetBatch: ...
+    def step(self, requests: tuple[ActionRequest, ...]) -> TransitionBatch: ...
     def episode_outcome(self, trace) -> EpisodeOutcome: ...
-    def feedback(self, trace, budget) -> FeedbackRecord: ...
+    def feedback(self, trace, token_budget) -> FeedbackRecord: ...
     def template_constraints(self, recipes, traces) -> TemplateRuleContext: ...
+    def state_dict(self) -> ComponentState: ...
+    def load_state_dict(self, state: ComponentState) -> None: ...
     def close(self) -> None: ...
 
 class PromptContextBuilder:
     def build_pair(self, baseline_messages, template, tokenizer) -> ContextPair: ...
 
 class PolicyScorer:
-    def score(self, context_batch, responses, policy_version) -> TokenScores: ...
+    def score(self, responses, context, policy_version) -> tuple[TokenScores, ...]: ...
 ```
 
-`TaskRecipe` 是“如何按任务标识创建初始实例”的配方，不是运行中的 env。`EvalInstance` 是某次具体初始化，用来固定一轮候选比较条件。`reset_instances`只操作显式slots，`capture_instance`须在首次action前调用；同实例重试材料与轻量TaskRecipe分开。`ResetBatch` 返回 obs、actions、task_id、sample_key、instance_id、episode_id 和有效槽位；step 返回 slot/request identity、原始 reward、done/truncated、动作诊断，不能只依靠列表完成顺序。
+TaskRecipe是按任务标识构造实例的配方；EvalInstance持有某次初始化的恢复材料，replay必须显式提供保存的实例。reset/step的请求记录直接绑定slot、request/attempt、episode/instance身份，取代位置列表的隐式关联。ResetEntry包含observation/actions/info，其 `request.instance.sample_key` 提供task_id/sample_key，`request.instance.instance_id` 和 `request.episode_id` 提供实例与episode身份；Transition保留原始reward、done/truncated、success、动作诊断和terminal snapshot。结果按身份匹配，允许完成顺序变化，缺失/多余/重复槽位和真实环境中的padding行均拒绝。
+
+所有Record提供state_dict/from_state_dict，模块Protocol提供版本化ComponentState的state_dict/load_state_dict；实际checkpoint I/O仍在TODO-09实现。fake adapter/evaluator harness已验证两环境模拟trace共享同一合同，真实subset隔离与auto-reset处理不在本项验收范围。
 
 `EpisodeOutcome` 至少为 `success: bool | None`、`task_score`、`task_return`、`termination_reason`、`valid`；infra error 的 success=None。`FeedbackRecord` 是已脱敏/裁剪的可见轨迹证据；`TemplateRuleContext` 可含 verifier 内部敏感标识用于拒绝规则，但不得送进反思 prompt。
 
@@ -709,7 +714,7 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 ### 8.4 每做一件事就更新记录
 
-本文件是入口与当前计划；实施记录为 [docs/p2o/implementation_log.md](p2o/implementation_log.md)，预检记录为 [docs/p2o/test_records/TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)。后续验收记录放在 `docs/p2o/test_records/<TODO编号>.md` 并从本文链接；预检不代表TODO实现或验收完成。
+本文件是入口与当前计划；实施记录为 [docs/p2o/implementation_log.md](p2o/implementation_log.md)，预检记录为 [docs/p2o/test_records/TODO-00-preflight.md](p2o/test_records/TODO-00-preflight.md)，当前验收为 [TODO-00.md](p2o/test_records/TODO-00.md)。后续验收记录放在 `docs/p2o/test_records/<TODO编号>.md` 并从本文链接；预检不代表TODO实现或验收完成。
 
 每次发现计划与现实diff时先登记 `问题ID→预期→实际证据→影响的模块/TODO→可选改法→用户决定→验收变更`，暂停依赖实现；未经用户决定的提案保持待定，不能先实现后补文档。即使只是后面TODO的前提被推翻，也要当场说明。用户确认后在变更记录保留原因，正文替换为新方案。
 
@@ -717,13 +722,13 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 每个大TODO结束，更新状态、证据链接、剩余问题、下一TODO受影响部分；如果接口/随机化/CRM优化改变了后续假设，先改本文对应段落与验收，再往下做。保留简短决策变更记录，正文只保留当前设计，不叠加互相冲突的“新版说明”。
 
-## 9. 严格串行 TODO LIST（当前均未验收，TODO-00预检暂停）
+## 9. 严格串行 TODO LIST（TODO-00已验收，等待反馈进入01）
 
 **公共门槛：每一项都包含实现+测试+数据核验+文档更新+向用户汇报并停止。不得跳过上一项的门槛直接展开下一大模块，也不同时开多个大TODO。**用户发出继续指示后再进入下一项。遇到问题/测试失败或不确定，按§0.1停下来问用户；无GPU时不得把mock通过标为实机通过。后续有单机8卡A100和真实Qwen3-8B，可以做有界功能实验，但不启动正式长训练。
 
-### [ ] TODO-00：公共合同模块与验收样例
+### [x] TODO-00：公共合同模块与验收样例
 
-- **当前状态：**宿主机预检已完成，P2O-ENV-001环境选择已由用户指定两任务的本机容器解决（§0.2.1）；容器内依赖/设备发现已检查，挂载访问失败，P2O-ENV-002待讨论。合同代码、样例与测试尚未创建。详见[预检记录](p2o/test_records/TODO-00-preflight.md)。
+- **当前状态：**已实现schema v1合同、公共Protocol、两环境模拟trace、16项测试与完整JSON输入输出；两个任务容器初始化完成后均测试通过，跨Python版本样例一致。详见[TODO-00验收记录](p2o/test_records/TODO-00.md)。本项完成后暂停，未进入TODO-01。
 - **实现范围：**contracts/types、sample_key/task_id/instance身份与历史状态合同、EnvAdapter协议、TaskRecipe/EvalInstance/Transition/EpisodeOutcome/ContextPair/TokenScores/P2OState，字段schema及版本；定义optional capability与异常类型，包括subset reset/step、terminal snapshot、原始token/logprob传递能力。先阅读两env真实输出，不先写整个trainer。
 - **输入→预期输出：**模拟一条ALFWorld和一条WebShop trace，均得到相同结构的EpisodeOutcome；缺失success/instance identity返回明确错误，不能补0。
 - **测试/数据核验：**序列化roundtrip；合法/非法schema；公共evaluator可用fake adapter执行而不识别任务名；train/dev sample_key隔离fixture（同key不同随机实例不得跨边）；所有后续模块的数据入口/出口能在合同中定位。
@@ -837,7 +842,9 @@ cache key包括policy_version、recipe/instance/panel、template hash、decoding
 
 ## 11. 本次交付状态与变更记录
 
-用户已启动实施；目前完成宿主机与容器预检及记录，尚未复制入口/trainer或创建业务模块/脚本。未启动环境、模型加载、GPU计算测试或正式训练，全部TODO未勾选。宿主机user-site覆盖问题已通过用户指定容器解决执行环境选择；两个容器均CUDA可见8卡，但无法访问 `/ceph_home` 挂载目录，当前按暂停要求等待P2O-ENV-002反馈。详见[问题与实施记录](p2o/implementation_log.md)。已阅读的代码事实包括Math trainer差异/恢复逻辑、两个baseline及reward/advantage、SimpleMemory逐步构造、vLLM所采token的rollout_log_probs、actor重算与Math的重复base评分、环境随机化/auto-reset、Ray/FSDP固定拓扑。
+TODO-00已完成：新增公共数据合同和Protocol、两环境模拟trace与16项验收测试、完整JSON样例及记录。两个指定容器已按用户授权重建并分别执行初始化脚本；挂载恢复、关键依赖导入及8卡基础运算通过。P2O-ENV-001/002已处理，无未解决环境阻塞。真实环境adapter、入口/trainer、collector、GEPA/CRM和checkpoint/资源实现仍待后续TODO；没有加载模型、生成轨迹或启动训练。当前等待用户反馈后进入TODO-01。
+
+详见[TODO-00验收记录](p2o/test_records/TODO-00.md)和[问题与实施记录](p2o/implementation_log.md)。原入口、trainer及环境/训练逻辑未改；本轮开始时已有用户的 `my_scripts/run_webshop.sh` 镜像名注释修改，保留且不纳入本次提交。
 
 最新计划调整：
 
@@ -1035,9 +1042,8 @@ TODO-09保存这些RNG/版本、未提交base/rescue阶段和档案引用；恢�
 
 ### 14.4 交接时的实际状态与第一步
 
-- 当前产物为本计划、实施日志及TODO-00预检记录；业务代码、测试脚本、checkpoint和新入口均未创建。15个大TODO均未通过验收，不要把代码阅读、CUDA设备可用性或文档检查勾成实现通过。
-- 实施前两仓库HEAD为a4f930c/92997e2，工作区唯一未跟踪文件为本计划；已以commit `0d4999d` 保存原始计划。未发现适用的AGENTS.md。模型路径存在，两个任务train/test parquet均读取为16/128行，与每epoch约一个16任务batch的规划一致；仍需TODO-01确认实际dataloader配置。
-- 宿主机GPU资源已核对为8张A100 80GB，驱动570.195.03。默认conda Python被用户目录PyTorch 2.14.0覆盖而无法初始化CUDA；`PYTHONNOUSERSITE=1` 下verl环境PyTorch 2.6.0/cu124与verl_newer_vllm环境PyTorch 2.8.0/cu128均报告CUDA可用、8设备。以上仅为宿主机诊断，未改包或驱动，不作为容器环境的测试结论。
-- 用户已要求开始实现并允许本机8卡调试，随后指定ALFWorld使用 `verl_zhangkaiqi2024_alfworld`、WebShop使用 `verl_zhangkaiqi2024_webshop`，均在本机。P2O-ENV-001的环境选择已明确，无需重新询问。两个容器运行中、CUDA可见8卡，挂载访问失败；下一步等待P2O-ENV-002处理选择，再继续TODO-00。临时复制源码到容器 `/tmp` 测试只是待确认提案，不得标为已经实施。
-- 参考P2O目录只读，所有实现放AGENT_ROOT；已有未提交改动属于用户/其他协作者，不能覆盖。本文作为唯一入口原位维护；新增日志文档后必须在本文链接，避免下一次接手遗漏。
-- TODO-00交付类型/API、最小两环境输入输出样例、序列化与错误合同验证，以及需用户确认的问题清单；完成后汇报并停止，不顺手进入TODO-01。
+- TODO-00已实现并验收；其余14项未执行。交付公共合同/Protocol、两环境模拟trace、16项测试及JSON输入输出，入口为[TODO-00验收记录](p2o/test_records/TODO-00.md)。真实adapter、训练入口、GEPA/CRM等仍未实现。
+- 两个指定容器已按用户授权重建，分别执行init_alfworld.sh/init_webshop.sh成功；挂载、任务依赖和训练入口导入、GPU 0–7基础运算均通过。容器/镜像指纹、命令及版本已记录。真实环境episode、模型加载/生成、训练update和8→7+1→8切换尚未测试。
+- 原始阅读基准仍为a4f930c/92997e2，计划快照commit为0d4999d；后续实现版本以目标仓库git log为准，参考P2O目录保持只读。用户原有run_webshop.sh注释修改保留。
+- sample_key不含seed，历史selected证据、schema版本、subset请求和原始token对齐等合同已落实；随机化合法字段、退化采样及其他提案仍按§14.3在对应模块确认。本项未先行决定后续算法。
+- 当前处于TODO-00完成停点，等待用户反馈后进入TODO-01；下一项只做独立入口/配置与本项合同衔接，不提前实现GEPA/CRM或正式训练。

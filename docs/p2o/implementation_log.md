@@ -2,6 +2,8 @@
 
 计划入口：[p2o_agent_implementation_plan.md](../p2o_agent_implementation_plan.md)。
 
+最新状态：TODO-00已实现并通过两容器验收；旧挂载问题已按用户授权通过重建和初始化解除。当前等待用户反馈后进入TODO-01。完整记录见[TODO-00.md](test_records/TODO-00.md)，以下保留定位及决策历史。
+
 ## 2026-10-15：TODO-00预检停点
 
 用户已授权开始实现，并允许使用本机8张GPU调试。每完成一个大TODO或遇到需要讨论的问题，暂停等待反馈；正式长训练不在授权范围内。
@@ -28,7 +30,7 @@
 
 **用户决定（2026-10-15）：**ALFWorld使用容器 `verl_zhangkaiqi2024_alfworld`，WebShop使用容器 `verl_zhangkaiqi2024_webshop`；两个容器都在当前这台机器上。环境选择已明确，宿主机conda候选方案不再作为默认执行方案。
 
-**状态：**已按反馈同步计划§0.2.1及本记录；环境选择问题已解决，容器内预检待执行。宿主机覆盖问题不能推断为容器内同样存在。下一步核对对应容器状态、仓库/模型/数据/输出挂载、实际Python/依赖及GPU可见性，然后继续TODO-00；验收标准不变。
+**状态：**环境选择问题已解决。后续容器预检发现独立挂载问题P2O-ENV-002，现已按用户授权重建并初始化通过；宿主机覆盖问题没有在新容器中复现，验收标准不变。
 
 ## 2026-10-15：补充用户指定的本机容器
 
@@ -51,6 +53,21 @@
 1. 推荐：TODO-00代码仍写宿主机目标仓库，只将合同模块、测试及样例临时复制到两容器 `/tmp`，不修改挂载/权限/原GRPO路径；按暂存源码hash核对测试版本。TODO-00仅做合同验收，真实环境/模型测试前再解决挂载。
 2. 先定位并处理容器挂载访问问题，再按原路径继续；任何重启、重建或权限修改的具体操作需要另行明确，不根据猜测执行。
 
-**用户决定：**已发出异步问题，待回复。
+**用户决定：**用户明确授权删除这两个旧容器，参照 `/ceph_home/zhangkaiqi2024/start_docker.sh` 重建；ALFWorld使用 `verlai/verl:vllm011.latest`，WebShop使用 `whatcanyousee/verl:ngc-cu124-vllm0.8.5-sglang0.4.6-mcore0.12.0-te2.3`。重建后分别执行 `my_scripts/init_alfworld.sh` 和 `my_scripts/init_webshop.sh`，验证环境后继续TODO-00。无需再次确认删除这两个容器。
 
-**状态：**按用户的暂停要求和计划§0.1/§13.10，保留现场并暂停合同实现；只完成只读定位和记录。未安装依赖、改权限、复制源码、修改挂载或重启容器。ALFWorld容器未安装pytest，后续合同测试可采用标准库unittest，尚未选择或运行测试实现。
+**状态：**已按授权完成重建及初始化，仓库/模型config/数据挂载可读，问题解除。未采用临时复制源码方案。重建前确认两容器内仅有sleep进程，无训练进程。工作区另有用户的 `my_scripts/run_webshop.sh` 注释修改，保留且不纳入本次提交。合同测试使用标准库unittest，无需安装pytest。
+
+## 2026-10-15约13:00–13:15：环境恢复与TODO-00完成
+
+复用用户启动脚本的docker run参数、指定镜像及原任务容器名重建两容器，分别执行对应init脚本，最终exit code均为0。WebShop镜像附加pip源反复TLS重试，终止本次安装进程后仅以临时环境变量忽略pip配置重跑；保留初始化脚本及包版本约束。两容器挂载恢复，关键任务依赖/训练入口导入、GPU 0–7逐卡基础CUDA运算通过；未加载模型、运行真实环境episode或启动训练。
+
+新增文件：
+
+- `verl/trainer/p2o/{__init__,contracts}.py`：schema v1记录、异常、能力声明、任务/实例/episode/turn身份、subset请求/结果、终止结果、上下文/原始生成token/评分、评价面板与请求结果、历史证据和P2OState/组件state边界。
+- `agent_system/p2o/{__init__,base}.py`：Stateful、EnvAdapter、ContextBuilder、PolicyGenerator/Scorer与EpisodeEvaluator Protocol。
+- `tests/trainer/p2o/{__init__,test_contracts,export_examples}.py` 及 `fixtures/traces.json`：共用fake adapter/evaluator、两环境模拟trace、错误/序列化/历史/对齐验收与可复现样例导出。
+- `docs/p2o/test_records/TODO-00.md`、`TODO-00-examples.json`：验收与环境恢复记录、完整模拟输入/输出。
+
+最终测试：初始化完成后，两容器各16项unittest均通过；ALFWorld为0.059s、WebShop为0.071s（测试体耗时）。两容器导出的JSON样例逐字节一致。源码指纹：contracts.py为 `f4f3d6c9f3130335d6bb1f19b59b183d4ba163a6f7993d5ef33c91c21c22209f`，base.py为 `08caba7c738df571a062332a1a57793b2f0cee426c70f95f86e16ea325d4bbce`，test_contracts.py为 `d4cf639940fa97bb411190fec856d669b2fa2de06abddca1e264ff09c94b8ab0`。完整命令、依赖、资源、输出和原始日志位置见[验收记录](test_records/TODO-00.md)。
+
+计划正文已更新为当前接口与已验收状态，TODO-00勾选。原入口/trainer/环境/collector/reward/actor及初始化脚本未改。保留待对应模块决定的随机化与退化模板采样边界，不先行实现。当前按逐大TODO停点要求暂停；下一步为TODO-01，等待用户反馈再开始。
