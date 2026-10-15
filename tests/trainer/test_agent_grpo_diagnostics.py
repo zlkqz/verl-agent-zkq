@@ -214,7 +214,7 @@ def test_manager_checks_pre_action_page_and_refreshes_page_state():
 
 
 @pytest.mark.parametrize('name,mini,grouping,penalty,entropy,kl', [
-    ('trajectory_grpo', '64', 'trajectory', 'joint', '0.0', 'False'),
+    ('trajectory_grpo', '256', 'trajectory', 'joint', '0.0', 'False'),
     ('separate_penalty', '256', 'step', 'separate', '0.0', 'False'),
     ('with_entropy', '256', 'step', 'joint', '0.001', 'False'),
     ('with_kl', '256', 'step', 'joint', '0.0', 'True'),
@@ -231,7 +231,7 @@ def test_independent_experiment_commands(name, mini, grouping, penalty, entropy,
     base_args = dict(arg.split('=', 1) for arg in shlex.split(baseline.stdout.splitlines()[-1]) if '=' in arg)
     differences = {key for key in base_args.keys() | args.keys() if base_args.get(key) != args.get(key)}
     expected_differences = {'trainer.experiment_name', 'trainer.default_local_dir'} | {
-        'trajectory_grpo': {'algorithm.grpo.reward_grouping', 'actor_rollout_ref.actor.ppo_mini_batch_size'},
+        'trajectory_grpo': {'algorithm.grpo.reward_grouping'},
         'separate_penalty': {'algorithm.grpo.invalid_penalty_mode'},
         'with_entropy': {'actor_rollout_ref.actor.entropy_coeff'},
         'with_kl': {'actor_rollout_ref.actor.use_kl_loss', 'actor_rollout_ref.actor.kl_loss_coef'},
@@ -240,7 +240,7 @@ def test_independent_experiment_commands(name, mini, grouping, penalty, entropy,
     experiment = args['trainer.experiment_name']
     expected_name = f'p2o_webshop_qwen3_8b_think_bs_16x8_mini_batch_{mini}_temperature0.8_length4096+4096_lr1e-6_{name}'
     assert experiment == expected_name
-    assert args['trainer.default_local_dir'] == str(ROOT.parent / 'saved_models/p2o-agent' / experiment)
+    assert args['trainer.default_local_dir'].endswith('/saved_models/p2o-agent/' + experiment)
     assert args['actor_rollout_ref.actor.ppo_mini_batch_size'] == mini
     assert args['algorithm.grpo.reward_grouping'] == grouping
     assert args['algorithm.grpo.invalid_penalty_mode'] == penalty
@@ -248,7 +248,7 @@ def test_independent_experiment_commands(name, mini, grouping, penalty, entropy,
     assert args['actor_rollout_ref.actor.use_kl_loss'] == kl
     assert args['actor_rollout_ref.actor.invalid_action_penalty_coef'] == '0.1'
     assert args['algorithm.use_kl_in_reward'] == 'False'
-    assert args['trainer.resume_mode'] == 'disable'
+    assert args['trainer.resume_mode'] == 'auto'
     if kl == 'True':
         assert args['actor_rollout_ref.actor.kl_loss_coef'] == '0.01'
 

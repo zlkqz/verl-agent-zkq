@@ -3,6 +3,18 @@
 repo_root=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd) || exit 1
 cd -- "$repo_root" || exit 1
 
+# Independent controls: prompt wording and the tokenizer's native switch.
+PROMPT_REQUIRE_THINK=${PROMPT_REQUIRE_THINK:-false}
+ENABLE_THINKING=${ENABLE_THINKING:-null}
+case "$PROMPT_REQUIRE_THINK" in
+    true|false) ;;
+    *) echo "PROMPT_REQUIRE_THINK must be true or false" >&2; exit 1 ;;
+esac
+case "$ENABLE_THINKING" in
+    null|true|false) ;;
+    *) echo "ENABLE_THINKING must be null, true or false" >&2; exit 1 ;;
+esac
+
 # Reduce glibc arena proliferation and return releasable heap memory sooner.
 export MALLOC_ARENA_MAX=${MALLOC_ARENA_MAX:-2}
 export MALLOC_TRIM_THRESHOLD_=${MALLOC_TRIM_THRESHOLD_:-131072}
@@ -60,9 +72,10 @@ kl_loss_coef=${kl_loss_coef:-0.001}
 grpo_reward_grouping=${grpo_reward_grouping:-step}
 grpo_invalid_penalty_mode=${grpo_invalid_penalty_mode:-joint}
 # model_path=/ceph_home/arknet/hf_models/Qwen/Qwen3-8B
-model_path=/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/Qwen3-8B
+model_path=${MODEL_PATH:-/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/Qwen3-8B}
 
-EXP_NAME="p2o_alfworld_qwen3_8b_think_bs_${train_data_size}x${group_size}_mini_batch_${mini_batch_size}_temperature${train_temperature}_length${max_prompt_length}+${max_response_length}_lr${lr}${EXP_NAME_SUFFIX:-}"
+# A wrapper or exported EXP_NAME takes precedence over the complete default.
+EXP_NAME=${EXP_NAME:-"p2o_alfworld_qwen3_8b_think_bs_${train_data_size}x${group_size}_mini_batch_${mini_batch_size}_temperature${train_temperature}_length${max_prompt_length}+${max_response_length}_lr${lr}${EXP_NAME_SUFFIX:-}"}
 # save_path=/ceph_home/zhangkaiqi2024/saved_models/p2o-agent/${EXP_NAME}
 save_path=/mnt/shared-storage-user/gpfs1-agent-security/luxinyu1/cot-p2o-space/saved_models/p2o-agent/${EXP_NAME}
 
@@ -90,6 +103,8 @@ cmd=(python3 -u -m verl.trainer.main_ppo \
     data.filter_overlong_prompts=True \
     data.truncation='error' \
     data.return_raw_chat=True \
+    data.prompt_require_think=$PROMPT_REQUIRE_THINK \
+    data.apply_chat_template_kwargs.enable_thinking=$ENABLE_THINKING \
     actor_rollout_ref.model.path=$model_path \
     actor_rollout_ref.actor.optim.lr=$lr \
     actor_rollout_ref.actor.checkpoint.contents='[model,optimizer,extra,hf_model]' \

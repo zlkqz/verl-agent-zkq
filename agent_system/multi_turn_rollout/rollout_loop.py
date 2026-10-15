@@ -18,6 +18,7 @@ import numpy as np
 from verl import DataProto
 from verl.utils.dataset.rl_dataset import collate_fn
 from verl.utils.model import compute_position_id_with_mask
+from verl.utils.agent_chat_template import REASONING_TAG_INSTRUCTION, apply_generation_chat_template
 import verl.utils.torch_functional as verl_F
 from transformers import PreTrainedTokenizer
 import uuid
@@ -62,7 +63,6 @@ class TrajectoryCollector:
 
         raw_prompt = gen_batch.non_tensor_batch['raw_prompt'][item]
         data_source = gen_batch.non_tensor_batch['data_source'][item]
-        apply_chat_template_kwargs = self.config.data.get("apply_chat_template_kwargs", {})
         
         # Get observation components
         obs_texts = obs.get('text', None)
@@ -87,6 +87,9 @@ class TrajectoryCollector:
         else:
             print(f"Warning: No text observation found!")
 
+        # Prompt wording is independent of the chat template's thinking switch.
+        if self.config.data.get("prompt_require_think", False):
+            obs_content += "\n" + REASONING_TAG_INSTRUCTION + "\n"
         
         chat = np.array([{
             "content": obs_content,
@@ -94,11 +97,8 @@ class TrajectoryCollector:
         }])
         
         # Apply chat template
-        prompt_with_chat_template = self.tokenizer.apply_chat_template(
-            chat,
-            add_generation_prompt=True,
-            tokenize=False,
-            **apply_chat_template_kwargs
+        prompt_with_chat_template = apply_generation_chat_template(
+            self.tokenizer, chat, self.config.data
         )
         
         # Initialize return dict

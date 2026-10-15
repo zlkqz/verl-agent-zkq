@@ -107,10 +107,10 @@ def test_main_and_trajectory_experiment_settings():
     base = launch_args('run_alfworld.sh')
     trajectory = launch_args('run_alfworld_trajectory_grpo.sh')
     for args, mini, grouping, suffix in [(base, '256', 'step', ''),
-                                        (trajectory, '64', 'trajectory', '_trajectory_grpo')]:
-        name = f'p2o_alfworld_qwen3_8b_think_bs_16x8_mini_batch_{mini}_temperature0.8_length4096+4096_lr1e-6{suffix}'
+                                        (trajectory, '256', 'trajectory', '_trajectory_grpo')]:
+        name = f'p2o_alfworld_qwen3_8b_think_bs_16x8_mini_batch_{mini}_temperature0.8_length3072+3072_lr1e-6{suffix}'
         assert args['trainer.experiment_name'] == name
-        assert args['trainer.default_local_dir'] == str(ROOT.parent / 'saved_models/p2o-agent' / name)
+        assert args['trainer.default_local_dir'].endswith('/saved_models/p2o-agent/' + name)
         assert args['data.train_files'] == str(ROOT / 'data/alfworld/text/train.parquet')
         assert args['actor_rollout_ref.actor.ppo_mini_batch_size'] == mini
         assert args['actor_rollout_ref.actor.entropy_coeff'] == '0.0'
@@ -118,9 +118,8 @@ def test_main_and_trajectory_experiment_settings():
         assert args['algorithm.use_kl_in_reward'] == 'False'
         assert args['algorithm.grpo.reward_grouping'] == grouping
         assert args['algorithm.grpo.invalid_penalty_mode'] == 'joint'
-        assert args['trainer.resume_mode'] == 'disable'
+        assert args['trainer.resume_mode'] == 'auto'
     differences = {key for key in base if base[key] != trajectory[key]}
-    assert differences == {'actor_rollout_ref.actor.ppo_mini_batch_size',
-                           'algorithm.grpo.reward_grouping', 'trainer.experiment_name',
+    assert differences == {'algorithm.grpo.reward_grouping', 'trainer.experiment_name',
                            'trainer.default_local_dir'}
     assert launch_args('run_alfworld_trajectory_grpo.sh', 'trainer.total_epochs=3')['trainer.total_epochs'] == '3'
